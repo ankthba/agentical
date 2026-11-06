@@ -1,0 +1,142 @@
+
+We evaluate the Rust prototype (Section~\ref{sec:rust-runtime}) on three questions:
+does replay reproduce a recorded run (E1), does recovery from a crash at any point preserve
+what was journaled and complete the run (E2), and what does journaling cost (E3)?
+These experiments test that the implementation follows the record, replay, and resume
+semantics for a single agent, matching the scope of the formal results, and they use a seeded
+stand-in for the LLM.
+
+\paragraph{Setup.}
+The agent is a small loop with two branches.
+It draws \texttt{classify} from $\{\texttt{tool}: 5/6,\ \texttt{answer}: 1/6\}$.
+On \texttt{tool} it draws \texttt{tool-arg} from $\{\texttt{arg-A}: 3/5,\ \texttt{arg-B}: 2/5\}$
+and performs a durable effect \texttt{commit(arg)} under the three-phase write-ahead
+discipline; on \texttt{answer} it draws \texttt{answer}, whose distribution has a single
+outcome.
+A recorded run therefore has two or four journal entries.
+The oracle is \texttt{SeededOracle}, a categorical sampler driven by SplitMix64, and the journal
+is \texttt{InMemoryJournal}.
+All seeds come from a fixed SplitMix64 stream, so every experiment is reproducible.
+Measurements were taken on an Apple M5 Pro with 48\,GB of memory, macOS~27.0.1, and
+rustc~1.93.0, in release builds.
+Each experiment is an integration test in the accompanying repository
+(\texttt{tests/eval\_e1.rs}, \texttt{eval\_e2.rs}, \texttt{eval\_e3.rs}) run with \texttt{cargo test --release --test <name> -- --nocapture}.
+
+\subsection{E1: Replay Determinism}
+\label{sec:eval-e1}
+
+For each of $N = 1{,}000$ trials we record a run with one seed, then replay the complete
+journal with a fresh oracle seeded independently.
+We compare the traces (each label carries its journal key and the realized value) and the
+final outputs.
+Theorem~\ref{thm:replay}(i)--(ii) predicts identical traces in every trial.
+
+\paragraph{Result.}
+All $1{,}000$ replays reproduced the recorded trace and output exactly.
+Every trial made at least one oracle draw, $810$ took the branch with the durable effect, and
+the replay seed differed from the record seed in every trial, so agreement comes from the
+journal rather than from the oracle.
+Because replay never consults the live oracle, this outcome is expected by construction; the
+experiment checks that the implementation conforms to \textsc{[O-rep]} and \textsc{[Eff-rep]}.
+
+\subsection{E2: Crash Recovery at Every Journal Position}
+\label{sec:eval-e2}
+
+For each of $1{,}000$ recorded runs, and for every crash point $k$ from $0$ to the journal
+length, we keep only the first $k$ journal entries, then resume in replay mode with a fresh
+oracle whose seed differs from the recording seed.
+If the crash point separates an effect's intent from its committed record, the resumed run
+stops at the dangling intent; we then apply Class-I recovery (re-perform with the journaled
+argument and commit) and resume again.
+For each resume we check that
+(a)~the run completes with an output and leaves no dangling intent;
+(b)~the first $k$ journal entries are unchanged and every trace label whose entry survived is
+reproduced;
+(c)~every oracle value lies in the support of its distribution and journal cursors stay dense;
+and (d)~an effect whose committed record survived is not performed again.
+
+\paragraph{Result.}
+The sweep made $4{,}664$ resumes.
+All $4{,}664$ completed and reproduced their surviving prefix, $832$ of them crashed inside an
+effect's write-ahead window and were recovered, and no surviving committed effect was performed
+again.
+
+\paragraph{Conditional law.}
+Corollary~\ref{cor:resume}(ii) says that the resumed continuation follows the original law conditioned on the
+replayed prefix.
+We check this on the prefix \texttt{classify = tool}: across $20{,}000$ resumes with fresh seeds,
+the re-sampled \texttt{tool-arg} was \texttt{arg-A} with frequency $0.5989$, against
+$3/5 = 0.6$ (standard error $\approx 0.0035$).
+
+\paragraph{Compensation.}
+After a crash inside the write-ahead window followed by a compensating recovery (Class~C),
+replaying the journal twice stops both times at the compensated effect, produces no output,
+performs no effect, and appends nothing, as the write-ahead design intends.
+
+\paragraph{A defect found by E2.}
+An earlier version of the driver stayed in replay mode after \textsc{[O-resume]} fell through to
+recording, so the next step re-read the entry just appended as if it were history and could
+produce out-of-support values.
+The original test suite missed this because its only crash test took the branch whose
+distribution has a single outcome; the sweep above fails on that version and passes on the
+corrected one.
+
+\subsection{E3: Journaling Overhead}
+\label{sec:eval-e3}
+
+\paragraph{Append latency.}
+We append $n \in \{10^3, 10^4, 10^5, 10^6\}$ oracle-draw events to an in-memory journal, after
+one warm-up pass, and report the mean time per append.
+Over six runs, every measurement fell between $88$ and $145$\,ns per append, with no growth in
+$n$, consistent with amortized constant-time append; the journal holds exactly one entry per
+step.
+These are single timed passes per size, not a statistical benchmark.
+
+\paragraph{Replay versus re-execution.}
+To model a networked LLM call we inject a latency of $1$\,ms into every oracle draw.
+A recorded run then takes about $2.51$\,ms, while replaying it takes $0.5$--$0.8\,\mu$s, a
+speedup of about $3{,}200\times$ to $4{,}900\times$ across six runs.
+The speedup is dominated by the injected latency: replay performs no oracle calls, so the
+time saved per replayed draw is the latency of the call itself.
+
+\paragraph{Not measured.}
+We did not measure the cost of journaling relative to a journal-free execution mode, which the
+prototype lacks, or the cost of persisting the journal (for example, \texttt{fsync} on every
+append), since no persistent backend exists yet.
+
+\subsection{Threats to Validity}
+\label{sec:eval-threats}
+
+\paragraph{Internal.}
+The seeded oracle stands in for an LLM.
+The experiments show that the implementation follows the record/replay semantics, not how real
+models behave.
+Crashes are simulated by truncating an in-memory journal; torn writes, \texttt{fsync} behavior,
+and storage failures are not exercised.
+
+\paragraph{Construct.}
+Trace comparison in E1 and E2 uses labels that carry cursors, prompts, and responses, as in
+Theorem~\ref{thm:replay}.
+E2 checks the conditional law on one prefix and one prompt, not in general.
+
+\paragraph{External.}
+All measurements come from one machine and a single in-memory backend, and the workload is a
+small agent; results for persistent backends, larger agents, or many concurrent agents may
+differ.
+
+\begin{table}[t]
+\centering
+\caption{Summary of the evaluation.}
+\label{tab:eval-summary}
+\fitwidth{%
+\begin{tabular}{@{}lllp{5.2cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Question} & \textbf{Result relates to} & \textbf{Outcome} \\
+\midrule
+E1 & Replay determinism & Theorem~\ref{thm:replay} & $1{,}000/1{,}000$ identical replays \\
+E2 & Crash at every position & Corollary~\ref{cor:resume}; side effects & $4{,}664/4{,}664$ resumes correct; no duplicate effects; conditional law matches \\
+E3 & Journaling overhead & implementation & 88--145\,ns per append, flat in $n$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

@@ -1,0 +1,99 @@
+
+\subsection{Formal Models of LLM Agents}
+
+\paragraph{LLMbda and FIDES.}
+LLMbda~\citep{garby2026llmbda} is an untyped call-by-value $\lambda$-calculus whose constructs
+include prompt-response conversations that can be forked and cleared, code generation, and
+dynamic information-flow control in which every value carries a label.
+Its first version followed FIDES~\citep{costa2025fides} in assuming that the underlying model is
+deterministic; the current version gives a probabilistic semantics, proves a
+termination-insensitive probabilistic noninterference theorem for the whole calculus, and uses
+its Lean-verified interpreter as the agent harness that calls the model.
+FIDES is a planner-based system that enforces information-flow policies around an LLM; its
+formal guarantees are stated for a deterministic model function.
+Like LLMbda we treat model calls probabilistically, but our concern is different: LLMbda
+studies what an agent's program may do with untrusted data, whereas we study recording,
+replaying, and recovering a run.
+
+\paragraph{Other calculi and languages for agents.}
+$\lambda_A$~\citep{liu2026lambdaA} extends the simply typed $\lambda$-calculus with oracle calls,
+bounded fixpoints, and probabilistic choice, and proves type safety and termination in Coq.
+PPDL~\citep{mandel2026ppdl} treats LLM-based flows as probabilistic programs whose semantics is a
+weighted distribution over traces.
+Zhou, D'Antoni, and Polikarpova~\citep{zhou2026lbac} have agents generate well-typed Haskell
+programs whose information flow is controlled with LIO~\citep{stefan2011lio}, and prove a
+soundness theorem with the model treated as a deterministic oracle.
+None of these addresses journaling, replay, or crash recovery.
+
+\paragraph{MSC coordination calculus.}
+Bollig, F\"{u}gger, and Nowak~\citep{bollig2026msc} specify multi-agent workflows as message
+sequence charts in a domain-specific language that separates message-passing structure from
+LLM calls, tool calls, and human control points, project global specifications to
+deadlock-free local programs, and machine-check all results in Lean~4.
+Their implementation, ZipperGen, runs workflows through a persistent store and can replay the
+committed history after a restart, although this durability is not part of the formal model.
+The calculus establishes coordination properties independently of LLM nondeterminism, treating
+model outputs as arbitrary; we instead treat each output as a draw from a measure, which is
+what lets us state that replay and recovery preserve distributions.
+
+\paragraph{Other formal and empirical work.}
+Schlapbach~\citep{schlapbach2026mcp} gives a process-calculus semantics for agentic tool
+protocols such as the Model Context Protocol; the second version of that preprint was withdrawn
+because of a logical flaw in one theorem, and a revised version has since been posted.
+Zaichyk~\citep{semanticfusion2026} studies decentralized coordination over scoped views of an
+ontology-structured shared memory, with probabilistic results about update proposals, and
+recovers from failures by re-synchronizing from shared state rather than by replay.
+Cemri et al.~\citep{cemri2025mast} build a taxonomy of multi-agent failures from more than
+1{,}600 annotated traces.
+Khatchadourian~\citep{khatchadourian2026replayable} proposes a protocol for replaying tool-using
+financial agents and comparing runs at different levels; it is an empirical harness, not a
+semantics.
+He and Yu~\citep{he2026postdeterministic} argue, in a short position paper, that systems built
+from agents must tolerate divergent execution traces that reach equivalent outcomes.
+
+\subsection{Record, Replay, and Recovery}
+
+\paragraph{Message logging.}
+Logging every nondeterministic event so that a process can be replayed after a failure is a
+classical technique.
+Strom and Yemini's optimistic recovery~\citep{strom1985optimistic} and the message-logging
+protocols surveyed by Elnozahy et al.~\citep{elnozahy2002survey} assume that processes are
+piecewise deterministic and log the nondeterministic events between deterministic intervals.
+Consistent global states are due to Chandy and Lamport~\citep{chandy1985snapshots}, and
+compensating transactions to Garcia-Molina and Salem's sagas~\citep{garcia1987sagas}.
+Our journal is message logging specialized to an agent whose nondeterministic events are model
+calls; what we add is a statement of its soundness inside a probabilistic semantics.
+
+\paragraph{Record, replay, and resume for LLM agents.}
+Several recent systems record LLM agent runs at their nondeterministic boundaries and replay
+them, for debugging or regression testing~\citep{mudasiru2026agrepl,chawla2026chronicle}.
+Khan~\citep{khan2026resume} specifies a checkpoint-and-resume contract for workflow persistence
+layers, checks it with machine-checked models, and finds duplicate effects after crashes in
+widely used frameworks; Zheng et al.~\citep{zheng2026execedits} give an exact, Lean-mechanized
+check of when agent executions can be checkpointed, forked, restored, or merged; and Wu et
+al.~\citep{wu2026safetoresume} show that rollback can restore states that are not consistent
+causal cuts.
+Li~\citep{li2026exactlyonce} proves that no policy based on verification alone achieves
+exactly-once effects under late commits without a bound on in-flight time.
+These works are deterministic or empirical; ours places replay and recovery inside a
+probabilistic semantics, for a single agent.
+
+\paragraph{Durable-execution engines.}
+Temporal~\citep{temporal2024docs} re-executes deterministic workflow code against an event
+history and records the results of Activities, including LLM calls, and of replay-safe
+operations such as random number generation~\citep{temporal2026sideeffects}.
+Restate~\citep{restate2026}, DBOS~\citep{dbos2026}, and LangGraph's
+checkpointing~\citep{langgraph2026persistence} take related journaling or checkpointing
+approaches.
+To our knowledge none of these systems comes with a formal semantics in which replay soundness
+is a theorem about distributions.
+
+\subsection{Probabilistic Semantics and Guarantees}
+
+Our semantics builds on the sampling view of probabilistic programs~\citep{kozen1981semantics,borgstrom2016probabilistic}
+and uses a coupling argument~\citep{barthe2015coupling}.
+For LLM agents, Bensalem et al.~\citep{bensalem2026threelayer} argue for chaining probabilistic
+assume-guarantee contracts to obtain system-level bounds, and Solko-Breslin et
+al.~\citep{solkobreslin2026probverif} bound the probability of policy violations without
+independence assumptions; both are complementary to replay, which preserves whatever
+probabilities such analyses attach to a run.

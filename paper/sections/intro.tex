@@ -1,0 +1,97 @@
+
+\subsection*{The problem}
+
+Large language models are increasingly deployed as autonomous agents that plan, call tools,
+and keep long-running state.
+Such runs fail often~\citep{cemri2025mast}, and they are hard to make durable.
+A run may last minutes or hours and call external tools with real side effects, and when the
+process crashes part-way through, the obvious recovery, re-running the agent from the start,
+re-samples every model call.
+The new run may take a different path, and it may repeat side effects that already happened.
+
+Durable-execution engines, exemplified by Temporal~\citep{temporal2024docs}, solve the
+engineering half of this problem by recording an event history.
+Workflow code must be deterministic; calls to the outside world, including LLM calls, run as
+\emph{Activities} whose results are recorded once and returned from the history on replay.
+The idea is classical: logging every nondeterministic event so that a piecewise-deterministic
+process can be replayed after a failure is the basis of message-logging recovery in
+distributed systems~\citep{strom1985optimistic,elnozahy2002survey}.
+For an LLM agent, however, this treats each model call as an opaque recorded value.
+The engine makes replay correct but gives no account of the distribution the value was drawn
+from, so it cannot say whether replay preserves the probability of a run, or what the
+distribution of the rest of a run is after recovery.
+Recent tools for LLM agents record and replay runs at their nondeterministic
+boundaries~\citep{mudasiru2026agrepl,chawla2026chronicle} and check resume behaviour against
+machine-checked contracts~\citep{khan2026resume,zheng2026execedits}, but they too are
+deterministic or empirical.
+
+Formal models of LLM agents, meanwhile, have focused elsewhere.
+LLMbda~\citep{garby2026llmbda} gives a probabilistic, Lean-verified semantics for a single
+agent's program with information-flow control, and $\lambda_A$~\citep{liu2026lambdaA} and
+PPDL~\citep{mandel2026ppdl} give probabilistic semantics to agent programs and LLM flows.
+The MSC calculus~\citep{bollig2026msc} proves coordination properties of many agents while
+treating model outputs as arbitrary.
+None of them models journaling, replay, or crash recovery.
+
+\subsection*{Contribution}
+
+We give a minimal probabilistic semantics for durable replay of an LLM agent and prove that
+replay and crash recovery are sound in a precise probabilistic sense.
+
+\begin{enumerate}
+
+\item \textbf{A probabilistic semantics with a journal (Section~\ref{sec:semantics}).}
+Every model call is a draw from an abstract probability measure and every response is recorded
+in an append-only journal; the agent runs in record, replay, or resume mode.
+Fixing the randomness on a tape lets runs in different modes be compared directly.
+
+\item \textbf{Replay soundness (Theorem~\ref{thm:replay}).}
+Replaying a run from its journal reproduces its trace and journal exactly.
+Replay therefore succeeds with probability~1, and recording then replaying induces the same
+distribution over traces as recording alone.
+
+\item \textbf{Crash recovery (Corollary~\ref{cor:resume}).}
+After a crash at any point, resuming with fresh randomness behaves exactly like an
+uninterrupted run whose randomness is spliced at the crash point.
+Resuming with the same randomness reproduces the original run, and resuming with fresh
+randomness continues it with the original distribution conditioned on what survived, provided
+the crash does not depend on a response that was never journaled.
+
+\item \textbf{A Lean mechanization (Section~\ref{sec:mechanization}).}
+The pointwise core of both results is proved in Lean~4 for every program tree, randomness
+tape, starting cursor, and crash point, with no unproven steps.
+
+\item \textbf{A prototype and measurements (Sections~\ref{sec:rust-runtime}
+and~\ref{sec:evaluation}).}
+A dependency-free Rust crate implements the semantics together with write-ahead logging for
+tool side effects.
+We measure replay determinism, recovery from a crash at every journal position, and journaling
+overhead.
+
+\end{enumerate}
+
+\noindent
+The paper's source, the Lean development, and the Rust prototype with all experiment
+harnesses are available at \url{https://github.com/ankthba/agentical}.
+
+\subsection*{Scope}
+
+The results concern a single agent.
+Logging nondeterministic events for replay is not new; what is new is a semantics in which
+recovery with fresh randomness provably preserves the distribution of a run
+(Corollary~\ref{cor:resume}(ii)), not only individual runs.
+Write-ahead logging of side effects is implemented and tested but not part of the formal
+results.
+Extending the guarantees to concurrently running agents and to information-flow control
+raises problems we describe in Section~\ref{sec:limitations}; we do not claim results for them
+here.
+
+\subsection*{Roadmap}
+
+Section~\ref{sec:background} reviews probabilistic semantics and durable execution.
+Section~\ref{sec:semantics} defines the calculus, and Section~\ref{sec:metatheory} proves
+replay soundness and crash recovery.
+Section~\ref{sec:rust-runtime} describes the prototype and Section~\ref{sec:evaluation} the
+experiments.
+Section~\ref{sec:related} discusses related work, Section~\ref{sec:limitations} limitations and
+future work, and Section~\ref{sec:conclusion} concludes.

@@ -1,0 +1,229 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[inline]{enumitem}
+\usepackage{stmaryrd}   % for \llbracket, \rrbracket
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+\usepackage[hidelinks]{hyperref}
+
+\geometry{margin=1in}
+\let\origtextsc\textsc
+\renewcommand{\textsc}[1]{\textup{\textmd{\origtextsc{#1}}}}
+\setlength{\emergencystretch}{3em}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{remark}[theorem]{Remark}
+\theoremstyle{remark}
+\newtheorem*{notation}{Notation}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
+
+\lstdefinelanguage{Rust}{
+  keywords={fn, trait, struct, enum, impl, type, async, await, pub, let,
+             mut, self, return, use, where, for, if, else, match, in,
+             Option, Result, Box, Vec, bool},
+  keywordstyle=\color{codepurple}\bfseries,
+  ndkeywords={String, u64, usize},
+  ndkeywordstyle=\color{codegreen},
+  sensitive=true,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{codegray}\itshape,
+  stringstyle=\color{codegreen},
+  morestring=[b]",
+}
+\lstset{
+  backgroundcolor=\color{backcolour},
+  basicstyle=\ttfamily\small,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=left,
+  numbersep=5pt,
+  numberstyle=\tiny\color{codegray},
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=2,
+  language=Rust,
+}
+
+\newcommand{\infrule}[3][]{%
+  \resizebox{\ifdim\width>\linewidth \linewidth\else \width\fi}{!}{$\displaystyle
+    \begin{array}{c}
+      #2 \\[-2pt]
+      \hline\\[-9pt]
+      #3
+    \end{array}%
+    \ifx\relax#1\relax\else\;\;[\textsc{#1}]\fi$%
+  }%
+}
+\newcommand{\fitwidth}[1]{%
+  \resizebox{\ifdim\width>\linewidth \linewidth\else \width\fi}{!}{#1}}
+\newcommand{\rulebox}[3][]{%
+  \[
+    \infrule[#1]{#2}{#3}
+  \]
+}
+
+\newcommand{\Agent}{\ensuremath{\mathbf{Agent}}}
+\newcommand{\Oracle}{\ensuremath{\mathbf{Oracle}}}
+\newcommand{\Chan}{\ensuremath{\mathbf{Chan}}}
+\newcommand{\Mem}{\ensuremath{\mathbf{Mem}}}
+\newcommand{\Journal}{\ensuremath{\mathbf{Journal}}}
+\newcommand{\Supervisor}{\ensuremath{\mathbf{Sup}}}
+\newcommand{\step}{\;\leadsto\;}
+\newcommand{\stepprob}[1]{\;\xrightarrow{#1}\;}
+\newcommand{\conf}[4]{\langle #1,\, #2,\, #3,\, #4 \rangle}
+\newcommand{\prob}[1]{\Pr\!\left[#1\right]}
+\newcommand{\expect}[1]{\mathbb{E}\!\left[#1\right]}
+\newcommand{\dist}{\mu}
+\newcommand{\record}{\textsc{rec}}
+\newcommand{\replay}{\textsc{rep}}
+\newcommand{\fault}{\,\lightning}
+\newcommand{\obsleq}{\sqsubseteq_{\mathrm{obs}}}
+\newcommand{\journal}{\mathcal{J}}
+\providecommand{\sched}{\mathfrak{s}}
+\newcommand{\fullconf}[5]{\langle #1;\, #2;\, #3;\, #4;\, #5 \rangle}
+\newcommand{\stepm}[1]{\;\xrightarrow{}\;_{\!\!#1}\;}
+\newcommand{\Dirac}[1]{\delta_{#1}}
+\newcommand{\OD}[3]{\mathsf{OracleDraw}(#1,#2,#3)}
+\newcommand{\CR}[2]{\mathsf{ChannelRecv}(#1,#2)}
+\newcommand{\Eff}[4]{\mathsf{Effect}(#1,#2,#3,#4)}
+\newcommand{\key}{\mathsf{key}}
+\newcommand{\lookup}{\mathsf{lookup}}
+\newcommand{\Low}{\mathit{Lo}}
+\newcommand{\obs}{\mathrm{obs}}
+\newcommand{\erase}[1]{\lfloor #1 \rfloor_{\Low}}
+\newcommand{\Sched}{\mathfrak{S}}
+\newcommand{\Prob}[2]{\mathbb{P}_{#1,#2}}
+\newcommand{\meas}[1]{\mu_{#1}}
+
+% Notation macros (see Appendix A)
+\newcommand{\labelLat}{\mathcal{L}}
+\newcommand{\labelLeq}{\sqsubseteq}
+\newcommand{\labelJoin}{\sqcup}
+\newcommand{\labLow}{\mathsf{Low}}
+\newcommand{\labHigh}{\mathsf{High}}
+\newcommand{\Dist}{\mathcal{D}}
+\newcommand{\Jour}{J}
+\newcommand{\jappend}[2]{#1 \cdot #2}
+\newcommand{\ClockEv}[2]{\mathsf{Clock}(#1,#2)}
+\newcommand{\JKSort}{\mathcal{K}}
+\newcommand{\jproj}[2]{#1 \upharpoonright #2}
+\newcommand{\Cursor}{\mathsf{Cursor}}
+\newcommand{\WL}[2]{\mathsf{WL}(#1,#2)}
+\newcommand{\schedLo}{\mathfrak{s}^{\Low}}
+\newcommand{\scong}{\equiv}
+\newcommand{\traceq}{\approx}
+\newcommand{\bigstep}{\Downarrow}
+\newcommand{\labTau}{\tau}
+\newcommand{\labOracle}[1]{o(#1)}
+\newcommand{\labSend}[2]{#1\,!\,#2}
+\newcommand{\labRecv}[2]{#1\,?\,#2}
+\newcommand{\labRead}[2]{\iota(#1,#2)}
+\newcommand{\labWrite}[2]{\omega(#1,#2)}
+\newcommand{\labEff}[2]{\mathsf{eff}(#1,#2)}
+\newcommand{\labSpawn}[1]{\mathsf{spw}(#1)}
+\newcommand{\labFault}{\,\lightning}
+\newcommand{\schedhat}{\hat{\mathfrak{s}}}
+\newcommand{\CouplingSpace}{\Omega}
+\newcommand{\obsLo}[1]{\obs_{\Low}(#1)}
+\newcommand{\lowEq}[1]{=_{\Low}}
+\newcommand{\contract}[2]{\models_{#1} #2}
+\newcommand{\decRestart}{\mathsf{restart}}
+\newcommand{\decComp}[1]{\mathsf{compensate}(#1)}
+\newcommand{\decEsc}{\mathsf{escalate}}
+\newcommand{\decStop}{\mathsf{stop}}
+\newcommand{\replayTerm}[2]{\mathsf{replay}(#1,\,#2)}
+\newcommand{\Atag}[1]{(\mathrm{A}_{#1})}
+\newcommand{\Qtag}[1]{\textbf{Q-#1}}
+
+\title{%
+  Provably Sound Replay and Crash Recovery \\
+  for Nondeterministic LLM Agents
+}
+
+\author{
+  Aniketh Bandlamudi \\
+  \small University of Virginia \\
+  \small\texttt{zpq3uh@virginia.edu}\quad\texttt{me@aniketh.net}
+}
+
+\date{November 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+\input{sections/intro}
+
+\section{Background}
+\label{sec:background}
+\input{sections/background}
+
+\section{A Probabilistic Semantics with a Journal}
+\label{sec:semantics}
+\input{sections/semantics}
+
+\section{Replay Soundness and Crash Recovery}
+\label{sec:metatheory}
+\input{sections/metatheory}
+
+\section{The Rust Prototype}
+\label{sec:rust-runtime}
+\input{sections/implementation}
+
+\section{Evaluation}
+\label{sec:evaluation}
+\input{sections/evaluation}
+
+\section{Related Work}
+\label{sec:related}
+\input{sections/related}
+
+\section{Limitations and Future Work}
+\label{sec:limitations}
+\input{sections/discussion}
+
+\section{Conclusion}
+\label{sec:conclusion}
+\input{sections/conclusion}
+
+\section*{Acknowledgments and Use of AI Tools}
+\addcontentsline{toc}{section}{Acknowledgments and Use of AI Tools}
+I developed this work with Anthropic's Claude as a collaborator on the proofs, code, and
+writing. Any errors are my own.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

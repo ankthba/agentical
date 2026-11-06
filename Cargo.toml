@@ -1,0 +1,13 @@
+[package]
+name = "agentical"
+version = "0.0.0"
+edition = "2021"
+description = "Research prototype: provably sound record, replay and crash recovery for nondeterministic LLM agents."
+license = "MIT OR Apache-2.0"
+keywords = ["agents", "llm", "process-calculus", "durable-execution", "actor"]
+categories = ["concurrency", "science"]
+publish = false
+
+# Zero dependencies (std only). The `runtime` module implements single-agent
+# record/replay; multi-agent execution and persistent backends are future work.
+[dependencies]

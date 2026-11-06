@@ -1,0 +1,74 @@
+
+The results of this paper concern a single agent with no recursion and no formalized side
+effects.
+This section describes the limits of the prototype and what extending the theory requires.
+Several of these extensions are subtle: designs that look natural turn out to be unsound, and we
+note the pitfalls we know of.
+
+\paragraph{The prototype.}
+The oracle in our experiments is a seeded stand-in for an LLM, and the journal is in memory, so
+the experiments show that the implementation follows the semantics, not how it behaves with
+real models or persistent storage.
+Experiments with real LLMs and a journal that survives process crashes are the natural next
+step.
+
+\paragraph{Recursion.}
+Our terms have no recursion, so every run makes finitely many calls.
+Agents that loop until a goal is met need recursion or a bounded loop; the theorems should
+extend to finite prefixes of possibly infinite runs, but we have not proved this.
+
+\paragraph{Side effects.}
+Write-ahead logging of side effects is implemented and tested but not formalized.
+A formal treatment must state what recovery can guarantee.
+Performing an interrupted effect again is safe for an idempotent effect of a single agent, but
+not in general: if another agent changed the same external state in the meantime, performing
+the effect again can undo that change.
+Compensation needs its own write-ahead discipline, or a crash during compensation can leave an
+effect undone twice or not at all.
+Li~\citep{li2026exactlyonce} shows that exactly-once effects cannot be achieved by verification
+alone under late commits without a bound on in-flight time, so any recovery theorem must rest on
+explicit assumptions about the external system, such as idempotence, atomicity, or a reliable
+way to query whether an effect happened.
+
+\paragraph{Concurrent agents.}
+With several agents, replay and recovery become substantially harder.
+\begin{itemize}[noitemsep]
+  \item \emph{Interleaving.} A replayed run must follow the original interleaving of the agents,
+    or agents that share state can read different values than they did originally. The
+    scheduler's choices must therefore be journaled or reproduced deterministically.
+  \item \emph{Recovery points.} Recovery must resume from a consistent cut of the agents'
+    journals~\citep{chandy1985snapshots}. With shared memory this must account for which write
+    each read observed, not only for messages; Wu et al.~\citep{wu2026safetoresume} show that
+    agent frameworks can roll back to states that are not consistent cuts.
+  \item \emph{Messages.} Messages sent before a cut but received after it must be delivered
+    again exactly once, which requires identifying messages by channel and sequence number
+    rather than by value.
+  \item \emph{Restart.} Restarting part of a running system, as a supervisor might, also
+    requires restoring the restarted agent's local state and suppressing messages it already
+    sent.
+\end{itemize}
+
+\paragraph{Information-flow control.}
+LLMbda~\citep{garby2026llmbda} proves probabilistic noninterference for a single agent's
+program.
+For concurrently scheduled agents, classical results on multi-threaded programs show that the
+scheduler must not observe how long secret computations take, or timing becomes an information
+channel~\citep{volpano1999probabilistic,sabelfeld2000probabilistic}.
+Coarse-grained floating labels~\citep{stefan2011lio}, as used for agents by
+APPA~\citep{kravchenko2026appa}, are a natural discipline, but they must keep the labels of
+existing memory cells fixed: if a high-security agent can overwrite a public cell with a
+secret label, whether a public agent can later read that cell leaks information.
+Parallel composition inside one agent is similarly delicate, because one thread's secret
+receive can block another's public output.
+Peters-Gill et al.~\citep{petersgill2026camels} show empirically that single-agent defences
+against prompt injection do not compose across agents, and Adams~\citep{adams2026sme} obtains
+noninterference for language models by running one instance per security level; a
+noninterference theorem for concurrently scheduled LLM agents remains open.
+
+\paragraph{Compositional guarantees.}
+If each agent of a system meets its own goal with probability at least $p_i$, Boole's
+inequality bounds the probability that all do by $1 - \sum_i (1 - p_i)$, without independence.
+The hard part is establishing the per-agent bounds inside a system, where an agent's inputs
+depend on other agents and on the scheduler; this needs an assume-guarantee argument of the
+kind Bensalem et al.~\citep{bensalem2026threelayer} advocate, and complements verification
+approaches that bound the probability of violations directly~\citep{solkobreslin2026probverif}.

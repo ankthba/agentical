@@ -1,0 +1,179 @@
+
+We state three results: the cursors of a run do not depend on its randomness
+(Lemma~\ref{lem:cursors}), replay reproduces a recorded run exactly
+(Theorem~\ref{thm:replay}), and resuming after a crash continues the run with the
+correct distribution (Corollary~\ref{cor:resume}).
+Each comes in a pointwise form, quantified over every tree and every tape, which is
+mechanized in Lean~4 (Section~\ref{sec:mechanization}), and a probabilistic form, which
+follows on paper from the pointwise one.
+Throughout we assume:
+\begin{description}[noitemsep]
+  \item[(A1)] $\mathit{Val}$ is countable and each $\meas{p}$ is a probability measure on it.
+  \item[(A2)] Replay and resume run the same program, from the same starting cursor, as the
+    recorded run.
+  \item[(A3)] The journal is not corrupted or reordered; a crash keeps a prefix of it.
+\end{description}
+
+\begin{lemma}[Cursors]
+\label{lem:cursors}
+For every tree $T$, tape $\omega$, and cursor $c$, the $i$-th entry of the journal of
+$\mathsf{rec}(T, \omega, c)$ has cursor $c+i-1$, whatever the responses (only the number of
+entries depends on them).
+\end{lemma}
+
+\begin{proof}
+By induction on $T$: each call appends one entry at the current cursor and advances it by one.
+\end{proof}
+
+\begin{theorem}[Replay soundness]
+\label{thm:replay}
+For every tree $T$, tape $\omega$, and cursor $c$, let $(t, J) = \mathsf{rec}(T, \omega, c)$.
+Then
+\[
+  \mathsf{rep}(T, J) \;=\; (t, J).
+\]
+Consequently:
+\begin{enumerate}[label=(\roman*), noitemsep]
+  \item \textbf{(Trace equivalence)} replaying the journal reproduces the recorded trace,
+    including every cursor, prompt, and response, and the journal itself;
+  \item \textbf{(Determinism)} replay is a function of the journal alone and reads no
+    randomness, so given $J$ it produces $t$ with probability~1;
+  \item \textbf{(Equiprobability)} for every set $\Phi$ of traces,
+    \[
+      \mathbb{P}\bigl[\,\mathsf{rec}(T,\omega,c) \text{ has trace in } \Phi\,\bigr]
+      \;=\;
+      \mathbb{P}\bigl[\,\mathsf{rep}(T, J_\omega) \text{ has trace in } \Phi\,\bigr],
+    \]
+    where $J_\omega$ is the journal of $\mathsf{rec}(T,\omega,c)$; that is, recording and then
+    replaying induces the same distribution over traces as recording alone, and by
+    Lemma~\ref{lem:tape} a trace $o(c,p_1,v_1)\cdots o(c{+}n{-}1,p_n,v_n)\,\mathsf{done}(v)$
+    of $T$ has probability $\prod_i \meas{p_i}(\{v_i\})$ under both.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+The identity is proved by induction on $T$.
+For $\mathsf{halt}(v)$ both sides are $(\mathsf{done}(v), \varepsilon)$.
+For $\mathsf{draw}(p, k)$, recording at cursor $c$ produces the entry $(c, p, v)$ with
+$v = \omega(c,p)$ and continues as $\mathsf{rec}(k(v), \omega, c+1) = (t', J')$, so
+$(t, J) = (o(c,p,v)\,t',\; (c,p,v)\,J')$.
+Replay reads the entry $(c, p, v)$, emits $o(c, p, v)$, and continues as
+$\mathsf{rep}(k(v), J')$, which equals $(t', J')$ by the induction hypothesis for the subtree
+$k(v)$.
+Part~(i) is the first component of the identity, and part~(ii) holds because $\mathsf{rep}$
+does not take a tape.
+For part~(iii), the identity holds for every $\omega$, so the two events are the same subset
+of $\Omega$ and have the same probability; the product formula is Lemma~\ref{lem:tape}.
+\end{proof}
+
+\noindent
+Part~(iii) is immediate from part~(i): it holds for every law on tapes, not only $\mathbb{P}$,
+and the same is true of deterministic replay under any input distribution.
+The probabilistic content of the paper lies elsewhere: in Lemma~\ref{lem:tape}, which says that
+the tape semantics realizes sampling from the oracle, and in Corollary~\ref{cor:resume}(ii),
+which says that recovery with fresh randomness preserves the distribution of a run.
+
+\begin{figure}[t]
+  \centering
+  \fitwidth{\input{figures/fig-crash-recovery}}
+  \caption{Crash recovery (Corollary~\ref{cor:resume}).
+    Calls $s_1 \ldots s_4$ run in record mode and append their outcomes to the journal; a crash
+    at $s_5$ loses all in-memory state but keeps the journal prefix. Resume replays the prefix
+    with probability~1 (\textsc{[O-rep]}), then switches to record mode
+    (\textsc{[O-resume]}) for the rest of the run.}
+  \label{fig:crash-recovery}
+\end{figure}
+
+\subsection{Crash Recovery}
+
+A crash loses the agent's in-memory state but, by (A3), keeps a prefix of the journal.
+Recovery resumes the program on that prefix with whatever randomness is available afterwards.
+To state the result, define the \emph{splice} of two tapes at cursor $m$ by
+\[
+  \mathsf{splice}_m(\omega, \omega')(c, p) \;=\;
+  \begin{cases}
+    \omega(c, p) & c < m,\\
+    \omega'(c, p) & c \geq m.
+  \end{cases}
+\]
+
+\begin{corollary}[Crash recovery]
+\label{cor:resume}
+For every tree $T$, tapes $\omega$ and $\omega'$, cursor $c$, and $n \in \mathbb{N}$, let $J$
+be the journal of $\mathsf{rec}(T, \omega, c)$ and $J_{<n}$ its first $n$ entries.
+Then
+\[
+  \mathsf{res}(T,\; J_{<n},\; \omega',\; c) \;=\; \mathsf{rec}\bigl(T,\; \mathsf{splice}_{c+n}(\omega, \omega'),\; c\bigr).
+\]
+Consequently:
+\begin{enumerate}[label=(\roman*), noitemsep]
+  \item \textbf{(Same randomness)} resuming with $\omega' = \omega$ reproduces the uninterrupted
+    run exactly, wherever the crash occurred;
+  \item \textbf{(Fresh randomness)} if $\omega'$ is drawn from $\mathbb{P}$ independently of
+    $\omega$, the resumed run has the same distribution as an uninterrupted record run, and
+    conditioned on the surviving prefix $J_{<n}$, its continuation has the same distribution
+    as the original run's continuation conditioned on the same prefix.
+\end{enumerate}
+\end{corollary}
+
+\begin{proof}
+The identity is proved by induction on $T$, generalizing over $c$ and $n$, using one auxiliary
+fact: a record run from cursor $c$ reads the tape only at cursors $\geq c$, so two tapes that
+agree from $c$ on give the same run.
+If $n = 0$, resuming on the empty journal is recording on $\omega'$, and
+$\mathsf{splice}_c(\omega, \omega')$ agrees with $\omega'$ from $c$ on.
+If $n > 0$ and $T = \mathsf{draw}(p, k)$, the first surviving entry is $(c, p, v)$ with
+$v = \omega(c, p) = \mathsf{splice}_{c+n}(\omega,\omega')(c, p)$, so both sides make the same
+first call and continue with $k(v)$ from cursor $c+1$ with $n-1$ surviving entries, where the
+induction hypothesis applies.
+
+For~(i), $\mathsf{splice}_m(\omega, \omega) = \omega$.
+For~(ii), the coordinates of $\mathsf{splice}_{c+n}(\omega, \omega')$ are independent with
+the right marginals, since those at cursors below $c+n$ come from $\omega$, the rest come from
+$\omega'$, and $\omega$ and $\omega'$ are independent; so the spliced tape has law $\mathbb{P}$
+and the resumed run has the record distribution.
+By Lemma~\ref{lem:cursors} the surviving prefix reads only coordinates at cursors below $c+n$,
+on which the two tapes agree, so it is the same random variable under $\omega$ and under the
+spliced tape.
+The pair (prefix, whole run) therefore has the same joint law under both tapes, and so does the
+conditional law of the run given the prefix.
+\end{proof}
+
+\begin{remark}[When the crash point is random]
+Corollary~\ref{cor:resume} fixes the crash point $n$.
+The identity holds for every $n$, so it also holds when $n$ is random.
+Part~(ii) then still holds if the crash point is a \emph{stopping time}, meaning whether the
+crash happens after $k$ entries depends only on the coordinates at cursors below $c+k$, and is
+independent of $\omega'$: replacing the coordinates after a stopping time by independent fresh
+ones does not change the law of a tape whose cursor rows are independent and identically
+distributed, which is the strong Markov property.
+It fails if the crash depends on a response that was drawn but not yet journaled.
+For example, let $T$ make one call whose response is a fair coin and return it, and let the
+process crash before journaling exactly when the response is $0$.
+Then the resumed run returns $1$ with probability $3/4$, not $1/2$.
+A recovery guarantee in distribution therefore needs the response to be journaled before
+anything that depends on it can crash the agent, which is the order \textsc{[O-rec]} enforces.
+\end{remark}
+
+\noindent
+For a single agent every prefix of its journal is a valid recovery point, so no
+consistent-cut condition is needed; Section~\ref{sec:limitations} explains why concurrent
+agents need one.
+
+\subsection{Mechanization}
+\label{sec:mechanization}
+
+Lemma~\ref{lem:cursors}, the identity of Theorem~\ref{thm:replay} with part~(i) and the
+pointwise core of part~(iii), and the identity of Corollary~\ref{cor:resume} with part~(i) are
+mechanized in Lean~4; part~(ii) of the theorem holds by the type of the replay function, which
+takes no tape (\texttt{lean/AgenticalT1.lean}, checked with Lean v4.30.0).
+The development represents values, prompts, and cursors by natural numbers, programs by the
+trees of Section~\ref{sec:syntax}, and tapes by functions
+$\mathbb{N} \to \mathbb{N} \to \mathbb{N}$, and quantifies over every tree, tape, starting
+cursor, and crash point.
+It contains no unproven steps, and \texttt{\#print axioms} reports only Lean's standard axioms
+(\texttt{propext}, and \texttt{Quot.sound} for the crash-recovery theorems).
+The translation from terms to trees and the measure-theoretic layer, Lemma~\ref{lem:tape} and
+the distributional parts of Theorem~\ref{thm:replay}(iii) and Corollary~\ref{cor:resume}(ii),
+are on paper; their proofs use the pointwise identities, Lemma~\ref{lem:cursors}, and the
+independence and marginals of the tape coordinates.

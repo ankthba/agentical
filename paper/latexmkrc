@@ -1,0 +1,39 @@
+# latexmkrc — latexmk configuration for the Agentical paper
+#
+# Usage:
+#   cd paper && latexmk          # uses settings here
+#   cd paper && latexmk -pdf     # explicit
+#   cd paper && latexmk -C       # full clean
+#
+# This file is read automatically by latexmk when invoked from the paper/
+# directory (or any parent if you pass -r /path/to/latexmkrc).
+
+# ---- Engine -----------------------------------------------------------
+# Default: pdflatex (universally available with TeX Live / MiKTeX).
+# To switch to XeLaTeX (needed for system fonts / Unicode), uncomment:
+#   $pdf_mode = 5; $xelatex = 'xelatex %O %S';
+# To switch to LuaLaTeX:
+#   $pdf_mode = 4;
+$pdf_mode = 1;              # 1 = pdflatex
+$pdflatex = 'pdflatex -interaction=nonstopmode -halt-on-error %O %S';
+
+# ---- Main document ----------------------------------------------------
+@default_files = ('main.tex');
+
+# ---- Bibliography -----------------------------------------------------
+# natbib + BibTeX (matches \bibliographystyle{plainnat} in main.tex).
+# To switch to biblatex/biber, set:  $bibtex_use = 2; (and update main.tex)
+$bibtex_use = 1;
+
+# ---- Output directory -------------------------------------------------
+# Uncomment to put build artefacts in a subdirectory (keeps paper/ clean):
+# $out_dir = 'build';
+# NOTE: if you enable $out_dir, add 'build/' to .gitignore.
+
+# ---- Extra extensions to clean ----------------------------------------
+$clean_ext = 'bbl blg nav snm synctex.gz';
+
+# ---- Dependency tracking extras ---------------------------------------
+# Tell latexmk that .sty files in the paper directory are dependencies.
+# This causes a rebuild when preamble.sty changes.
+add_input_ext('sty');

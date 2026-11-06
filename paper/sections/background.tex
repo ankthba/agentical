@@ -1,0 +1,75 @@
+
+This section reviews the two traditions the paper connects: probabilistic semantics, and
+durable execution by logging and replay.
+
+\subsection{Probabilistic Semantics}
+\label{sec:bg-prob}
+
+Probabilistic program semantics goes back at least to Kozen~\citep{kozen1981semantics}, who
+interpreted programs as transformers of probability measures.
+Borgstr\"{o}m et al.~\citep{borgstrom2016probabilistic} give distribution-based big-step and
+small-step semantics for a probabilistic call-by-value $\lambda$-calculus and prove them
+equivalent, together with a sampling-based semantics that agrees with them when integrated over
+traces.
+Our semantics is of the sampling kind: a run reads its random choices from a tape, and the
+distribution over runs is induced by the distribution over tapes (Lemma~\ref{lem:tape}).
+Fixing the tape is also what lets us compare runs in different modes directly, an instance of
+the coupling method for relational reasoning about probabilistic
+programs~\citep{barthe2015coupling}.
+Probabilistic automata~\citep{segala1995probabilistic} add nondeterministic choice, resolved by
+a scheduler, to probabilistic transitions; a single agent needs no scheduler, but concurrent
+agents would (Section~\ref{sec:limitations}).
+
+\subsection{Durable Execution}
+\label{sec:bg-durable}
+
+Durable-execution systems, Temporal~\citep{temporal2024docs} being the canonical production
+example, give long-running workflows crash-recoverable semantics.
+The mechanism is an \emph{event history}: an append-only log of all externally determined
+values received by the workflow.
+On restart, the workflow code is re-executed from the beginning, but any call that would
+normally block on an external response instead returns the stored value from the log.
+Workflow code must therefore be deterministic: re-run against the same history, it must make
+the same decisions.
+Calls to the outside world, including LLM calls, run as \emph{Activities} whose results are
+recorded once and thereafter returned from the history, and other nondeterministic values such
+as random numbers are obtained through replay-safe SDK operations that record
+them~\citep{temporal2026sideeffects}.
+This makes replay correct, but it gives no semantics to the \emph{distribution} of an
+Activity's outcome, only to the single realized value.
+
+The technique itself is classical.
+Message-logging protocols for rollback recovery~\citep{strom1985optimistic,elnozahy2002survey}
+assume that processes are \emph{piecewise deterministic}: execution is deterministic between
+nondeterministic events, which are logged and replayed.
+Our journal applies the same idea to an LLM agent, for which every model call is a
+nondeterministic event, and our contribution is to state and prove its soundness inside a
+probabilistic semantics.
+
+\subsection{Comparison}
+
+Table~\ref{tab:comparison} compares this work with the closest related systems;
+Section~\ref{sec:related} discusses them in detail.
+
+\begin{table}[ht]
+\centering
+\caption{Comparison with the closest related systems.
+  \checkmark~= supported, $\times$~= not supported, $\sim$~= partial.}
+\label{tab:comparison}
+\fitwidth{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{System} & \textbf{Multi-agent} & \textbf{Prob.\ semantics} & \textbf{Durable replay} & \textbf{Mechanized} & \textbf{Impl.} \\
+\midrule
+LLMbda~\citep{garby2026llmbda}
+  & $\times$ & \checkmark & $\times$ & \checkmark{} (Lean) & \checkmark{} (verified interpreter) \\
+MSC coord.~\citep{bollig2026msc}
+  & \checkmark & $\times$ (black box) & $\sim$ (ZipperGen, informal) & \checkmark{} (Lean~4) & \checkmark{} (Python) \\
+Temporal~\citep{temporal2024docs}
+  & $\sim$ & $\times$ (det.\ required) & \checkmark & $\times$ & \checkmark \\
+\textbf{This work}
+  & $\times$ & \checkmark & \checkmark & \checkmark{} (Lean, pointwise) & \checkmark{} (Rust) \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

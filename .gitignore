@@ -1,0 +1,33 @@
+# Rust
+/target/
+# Machine-specific cargo settings (local target dir)
+/.cargo/
+
+# macOS
+.DS_Store
+
+# LaTeX build outputs
+/paper/*.aux
+/paper/*.bbl
+/paper/*.blg
+/paper/*.log
+/paper/*.out
+/paper/*.toc
+/paper/*.fls
+/paper/*.fdb_latexmk
+/paper/*.synctex.gz
+
+# Generated arXiv upload bundle
+/agentical-arxiv.tar.gz
+
+# Kept locally, not published: working notes, an incomplete earlier Lean
+# development, and unused paper sources
+/docs/
+/mechanization/
+/paper/preamble.sty
+/paper/figures/README.md
+/paper/figures/fig-architecture.tex
+/paper/figures/fig-positioning.tex
+
+# Full multi-agent draft under repair (not published)
+/paper-full-draft/

@@ -1,0 +1,56 @@
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center, font=\small},
+  rec/.style={draw, circle, inner sep=0pt, minimum size=17pt, font=\scriptsize},
+  rep/.style={draw, circle, densely dashed, fill=black!10, inner sep=0pt, minimum size=17pt, font=\scriptsize},
+  jb/.style={draw, rounded corners=1pt, minimum width=1.3cm, minimum height=0.46cm, inner sep=1pt, font=\scriptsize},
+  jv/.style={->, densely dashed, thin, gray},
+  lbl/.style={font=\scriptsize\itshape},
+]
+
+\foreach \i/\x in {1/2, 2/3.5, 3/5, 4/6.5} { \node[rec] (s\i) at (\x,0) {$s_{\i}$}; }
+\draw[->] (s1)--(s2); \draw[->] (s2)--(s3); \draw[->] (s3)--(s4);
+
+\draw[->] (s4) -- (7.4,0);
+\draw[very thick] (7.45,-0.22)--(7.95,0.22);
+\draw[very thick] (7.95,-0.22)--(7.45,0.22);
+\node[font=\footnotesize\bfseries] at (7.7,0.5) {crash};
+\node[lbl, anchor=west] at (8.15,0) {in-memory state lost};
+
+\draw[thin] (1.4,0.55)--(7.0,0.55);
+\draw[thin] (1.4,0.42)--(1.4,0.6);
+\draw[thin] (7.0,0.42)--(7.0,0.6);
+\node[lbl] at (4.2,0.85) {original recorded run (RECORD)};
+
+\foreach \i/\x in {1/2, 2/3.5, 3/5, 4/6.5} {
+  \node[jb] (j\i) at (\x,-1.5) {$(k_{\i},v_{\i})$};
+  \draw[jv] (s\i.south) -- (j\i.north);
+}
+\node[lbl, anchor=west] at (7.3,-1.5) {$J^*$: one entry appended per step (durable)};
+
+\foreach \i/\x in {1/2, 2/3.5, 3/5, 4/6.5} {
+  \node[rep] (r\i) at (\x,-3.5) {$s_{\i}$};
+  \draw[jv] (j\i.south) -- (r\i.north);
+}
+\draw[->, densely dashed] (r1)--(r2);
+\draw[->, densely dashed] (r2)--(r3);
+\draw[->, densely dashed] (r3)--(r4);
+
+\draw[densely dotted, thick] (7.3,-3.95)--(7.3,-3.05);
+\draw[->] (r4) -- (7.25,-3.5);
+\node[rec] (s5) at (8.3,-3.5) {$s_5$};
+\draw[->] (7.35,-3.5) -- (s5);
+\node[lbl] at (7.3,-2.75) {$[O\text{-}resume]$};
+
+\draw[thin] (1.4,-4.05)--(7.0,-4.05);
+\draw[thin] (1.4,-3.9)--(1.4,-4.08);
+\draw[thin] (7.0,-3.9)--(7.0,-4.08);
+\node[lbl, align=center] at (4.2,-4.45) {replay prefix: reproduces the original\\(Theorem~\ref{thm:replay})};
+\draw[thin] (7.8,-4.05)--(8.8,-4.05);
+\draw[thin] (7.8,-3.9)--(7.8,-4.08);
+\draw[thin] (8.8,-3.9)--(8.8,-4.08);
+\node[lbl, align=center] at (8.3,-4.45) {new\\(record)};
+
+\draw[->, thick] (1.0,-0.35) -- (1.0,-3.15);
+\node[lbl, rotate=90, anchor=south] at (0.72,-1.75) {resume: replay $J^*$ from the start};
+\end{tikzpicture}

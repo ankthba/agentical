@@ -1,0 +1,38 @@
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center, font=\small},
+  term/.style={draw, rounded corners=2pt, minimum width=4.8cm, minimum height=0.75cm, inner sep=3pt},
+  state/.style={draw, rounded corners=2pt, minimum width=2.7cm, minimum height=0.62cm, inner sep=2pt, font=\footnotesize},
+  jbox/.style={draw, densely dashed, rounded corners=1pt, minimum width=3.6cm, minimum height=0.58cm, inner sep=3pt, font=\footnotesize},
+  lbl/.style={font=\scriptsize\itshape},
+  arrow/.style={->, thick},
+  darrow/.style={->, semithick, densely dashed},
+]
+\def\xR{-4.7}\def\xP{4.7}
+
+\node[term] (draw) at (0,0) {$\texttt{let}\;x \leftarrow \mathrm{oracle}(e)\;\texttt{in}\;M$};
+\node[font=\bfseries] at (\xR,1.2) {RECORD mode};
+\node[font=\bfseries] at (\xP,1.2) {REPLAY mode};
+\draw[very thick, dotted] (0,-0.7) -- (0,-5.5);
+
+\coordinate (rb) at (\xR,-1.5);
+\draw[arrow] (draw.south west) -- node[lbl, above left=-2pt]{$[O\text{-}rec]$} (rb);
+\node[state] (v1) at (\xR-1.7,-3.0) {$C'_1\,[x\mapsto v_1]$};
+\node[state] (v2) at (\xR+1.7,-3.0) {$C'_2\,[x\mapsto v_2]$};
+\node at (\xR+3.3,-3.0) {$\cdots$};
+\draw[arrow] (rb) -- node[lbl, left=1pt]{$\mu_p(\{v_1\})$} (v1.north);
+\draw[arrow] (rb) -- node[lbl, right=1pt]{$\mu_p(\{v_2\})$} (v2.north);
+\node[jbox] (jrec) at (\xR,-4.3) {$J \mathrel{+\!=} (c, p, v_i)$};
+\draw[darrow] (v2.south) -- (jrec.north);
+\node[lbl, text width=6.2cm] at (\xR,-5.15)
+  {probabilistic successor distribution $\mathcal{D}_{rec}$; the realized $v_i$ is appended to $J$};
+
+\coordinate (pb) at (\xP,-1.5);
+\draw[arrow] (draw.south east) -- node[lbl, above right=-2pt]{$[O\text{-}rep]$} (pb);
+\node[state] (vr) at (\xP,-3.0) {$C'\,[x\mapsto v_j]$};
+\draw[arrow] (pb) -- node[lbl, right=1pt]{probability $=1$} (vr.north);
+\node[jbox] (jrep) at (\xP,-4.3) {next entry $(c, p, v_j)$};
+\draw[darrow] (vr.south) -- (jrep.north);
+\node[lbl, text width=6.2cm] at (\xP,-5.15)
+  {deterministic read (no append); same cursor $c$ as the record run (Lemma~\ref{lem:cursors})};
+\end{tikzpicture}

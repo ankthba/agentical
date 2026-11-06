@@ -1,0 +1,154 @@
+
+We give a small calculus for a single agent whose only source of nondeterminism is calls to
+a language model, together with a journal that records every outcome.
+The calculus is deliberately minimal: it isolates the part of an agent that durable
+execution has to get right, namely the interplay between stochastic model calls and the
+record that makes them reproducible.
+
+\subsection{Syntax}
+\label{sec:syntax}
+
+Let $\mathit{Val}$ be a countable set of values; prompts and model outputs are values (for
+example, finite token sequences).
+Expressions $e$ are pure and deterministic: $e \Downarrow v$ is a total function from closed
+expressions to values, and we assume programs are well typed, so the condition of an
+$\mathbf{if}$ evaluates to a boolean.
+Terms are
+\[
+  M, N \;::=\; \mathbf{return}\;e
+    \;\mid\; \mathbf{let}\;x = e\;\mathbf{in}\;M
+    \;\mid\; \mathbf{if}\;e\;\mathbf{then}\;M\;\mathbf{else}\;N
+    \;\mid\; \mathbf{let}\;x \Leftarrow \mathbf{oracle}(e)\;\mathbf{in}\;M .
+\]
+The term $\mathbf{let}\;x \Leftarrow \mathbf{oracle}(e)\;\mathbf{in}\;M$ asks the model with
+the prompt that $e$ evaluates to and binds the response to $x$ in $M$.
+An \emph{oracle} assigns to each prompt $p$ a probability measure $\meas{p}$ on
+$\mathit{Val}$; since $\mathit{Val}$ is countable, $\meas{p}$ is discrete.
+Nothing else is assumed about $\meas{p}$: the results below hold for every oracle.
+The same construct models any externally determined value, such as a tool response, a
+message from the environment, or a clock read; we speak of model calls for concreteness.
+We omit general recursion, so every run makes finitely many oracle calls
+(Section~\ref{sec:limitations} discusses lifting this).
+
+\paragraph{Programs as trees.}
+Because expressions are pure, the behaviour of a closed term is captured by its tree of
+oracle calls: either it halts with a value, or it makes a call with some prompt $p$ and
+continues with a subtree that depends on the response.
+Formally, define $T(M)$ by
+\begin{align*}
+  T(\mathbf{return}\;e) &= \mathsf{halt}(v) && \text{where } e \Downarrow v,\\
+  T(\mathbf{let}\;x = e\;\mathbf{in}\;M) &= T(M[v/x]) && \text{where } e \Downarrow v,\\
+  T(\mathbf{if}\;e\;\mathbf{then}\;M\;\mathbf{else}\;N) &= T(M) \text{ or } T(N) && \text{as } e \Downarrow \mathsf{true} \text{ or } \mathsf{false},\\
+  T(\mathbf{let}\;x \Leftarrow \mathbf{oracle}(e)\;\mathbf{in}\;M) &= \mathsf{draw}\bigl(p,\; v \mapsto T(M[v/x])\bigr) && \text{where } e \Downarrow p.
+\end{align*}
+Trees are well founded because terms have no recursion.
+All definitions and results below depend only on $T(M)$, and the Lean development
+(Section~\ref{sec:mechanization}) works directly with these trees.
+
+\subsection{The Journal and Three Modes}
+\label{sec:modes}
+
+A \emph{journal} $J$ is a finite list of entries $(c, p, v)$: the cursor $c$ (the entry's
+position in the log), the prompt $p$, and the response $v$.
+The agent runs in one of three modes.
+\begin{description}[noitemsep]
+  \item[Record.] Each call is answered by the oracle, and its entry is appended to the journal.
+  \item[Replay.] Each call is answered from the next journal entry; the oracle is not consulted.
+  \item[Resume.] Replay until the journal is exhausted, then switch to record mode for the rest
+    of the run. This is recovery after a crash.
+\end{description}
+A run emits a \emph{trace}: one label $o(c, p, v)$ per call, recording its cursor, prompt,
+and response, followed by $\mathsf{done}(v)$ when the run halts with $v$.
+
+\paragraph{Randomness tapes.}
+To compare runs in different modes we fix their randomness in advance.
+A \emph{tape} is a function $\omega : \mathbb{N} \times \mathit{Val} \to \mathit{Val}$, where
+$\omega(c, p)$ is the response the oracle gives to prompt $p$ at cursor $c$.
+Let $\Omega$ be the set of tapes with the product measure
+$\mathbb{P} = \bigotimes_{(c,p)} \meas{p}$, under which the coordinates are independent and
+$\omega(c,p)$ has law $\meas{p}$.
+Since $\mathit{Val}$ is countable, so is the set of finite traces, so every set of traces is
+measurable and every function of a run defined below is a random variable.
+
+\paragraph{Semantics.}
+Write $\mathsf{rec}(T, \omega, c)$, $\mathsf{rep}(T, J)$, and $\mathsf{res}(T, J, \omega, c)$
+for the (trace, journal) pair produced by running tree $T$ from cursor $c$ in each mode:
+\begin{align*}
+  \mathsf{rec}(\mathsf{halt}(v), \omega, c) &= (\mathsf{done}(v),\; \varepsilon)\\
+  \mathsf{rec}(\mathsf{draw}(p, k), \omega, c) &= o(c,p,v) \cdot \mathsf{rec}(k(v), \omega, c{+}1)
+    && v = \omega(c,p), \text{ entry } (c,p,v)\\[3pt]
+  \mathsf{rep}(\mathsf{halt}(v), J) &= (\mathsf{done}(v),\; \varepsilon)\\
+  \mathsf{rep}(\mathsf{draw}(p, k), (c',p',v) \cdot J) &= o(c',p,v) \cdot \mathsf{rep}(k(v), J)
+    && \text{entry } (c',p,v)\\
+  \mathsf{rep}(\mathsf{draw}(p, k), \varepsilon) &= (\varepsilon, \varepsilon)
+    && \text{journal exhausted}
+\end{align*}
+Here $\ell \cdot (t, J)$ prepends the label $\ell$ to the trace $t$ and the indicated entry to
+$J$; replay re-emits each journal entry it consumes, so its output journal can be compared
+with the recorded one.
+Resume mode replays while the journal lasts and then records, tracking the cursor $c$ so that
+the first fresh call lands at the position after the last surviving entry:
+\begin{align*}
+  \mathsf{res}(\mathsf{halt}(v), J, \omega, c) &= (\mathsf{done}(v),\; \varepsilon)\\
+  \mathsf{res}(\mathsf{draw}(p, k), (c',p',v) \cdot J, \omega, c) &= o(c',p,v) \cdot \mathsf{res}(k(v), J, \omega, c{+}1)
+    && \text{entry } (c',p,v)\\
+  \mathsf{res}(\mathsf{draw}(p, k), \varepsilon, \omega, c) &= o(c,p,v) \cdot \mathsf{res}(k(v), \varepsilon, \omega, c{+}1)
+    && v = \omega(c,p), \text{ entry } (c,p,v)
+\end{align*}
+These functions correspond to the small-step rules
+\begin{align*}
+  &\textsc{[O-rec]} && \langle \mathsf{draw}(p,k), J, c \rangle \xrightarrow{o(c,p,v)} \langle k(v), J\cdot(c,p,v), c{+}1 \rangle
+     && \text{with probability } \meas{p}(\{v\}),\\
+  &\textsc{[O-rep]} && \langle \mathsf{draw}(p,k), (c',p',v)\cdot R, c \rangle \xrightarrow{o(c',p,v)} \langle k(v), R, c{+}1 \rangle
+     && \text{with probability } 1,\\
+  &\textsc{[O-resume]} && \langle \mathsf{draw}(p,k), \varepsilon, c \rangle \text{ in resume mode steps as \textsc{[O-rec]}},
+\end{align*}
+where in replay and resume mode $R$ is the part of the journal not yet replayed.
+In replay mode an exhausted journal at a call is stuck; in resume mode it falls through to
+recording.
+\textsc{[O-rec]} is the only rule whose successor is not a single configuration, so all
+randomness in a run comes from oracle calls.
+Replay checks neither the journaled prompt nor the cursor against the program: it trusts that
+it is replaying the same program from the same starting cursor (assumption A2 below).
+
+\begin{figure}[t]
+  \centering
+  \fitwidth{\input{figures/fig-record-replay}}
+  \caption{Record and replay of one oracle call.
+    In record mode (left) the call samples $v \sim \meas{p}$ and appends $(c, p, v)$ to the
+    journal. In replay mode (right) the same call reads the next entry with probability~1 and
+    appends nothing new. The cursor $c$ does not depend on any sampled value
+    (Lemma~\ref{lem:cursors}), so both modes address the same entry.}
+  \label{fig:record-replay}
+\end{figure}
+
+\paragraph{The record distribution.}
+The record run samples each response from the oracle as it goes.
+Its distribution is that of $\mathsf{rec}(T, \omega, c)$ for $\omega \sim \mathbb{P}$:
+
+\begin{lemma}[Tapes realize sampling]
+\label{lem:tape}
+Call $t = o(c,p_1,v_1) \cdots o(c{+}n{-}1,p_n,v_n)\,\mathsf{done}(v)$ a \emph{trace of $T$
+from $c$} if it follows a path of $T$: each $p_i$ is the prompt $T$ issues after the responses
+$v_1, \ldots, v_{i-1}$, and $T$ then halts with $v$.
+For every tree $T$, cursor $c$, and finite trace $t$ of this form,
+\[
+  \mathbb{P}\bigl[\,\mathsf{rec}(T,\omega,c) \text{ has trace } t\,\bigr]
+  \;=\; \prod_{i=1}^{n} \meas{p_i}(\{v_i\})
+\]
+if $t$ is a trace of $T$, and $0$ otherwise. This is the probability that the sampling
+semantics (rule \textsc{[O-rec]}) produces $t$.
+\end{lemma}
+
+\begin{proof}
+The $i$-th call of the run is made at cursor $c+i-1$ with a prompt $p_i$ that is determined by
+the responses $v_1, \ldots, v_{i-1}$, and its response is the coordinate
+$\omega(c+i-1, p_i)$.
+The event that the run produces $t$ is therefore the event that
+$\omega(c+i-1, p_i) = v_i$ for $i = 1, \ldots, n$, where $p_1, \ldots, p_n$ are the prompts
+that $T$ issues along $t$ (fixed once $t$ is fixed).
+These are $n$ distinct coordinates of the tape, so by independence the event has probability
+$\prod_i \meas{p_i}(\{v_i\})$.
+The sampling semantics produces $t$ with the same probability, by the chain rule:
+given the first $i-1$ responses, the $i$-th is drawn from $\meas{p_i}$.
+\end{proof}

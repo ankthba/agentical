@@ -1,0 +1,14 @@
+
+We gave a minimal probabilistic semantics for durable replay of an LLM agent, in which every
+model call is a draw from an abstract measure and every response is journaled.
+In this setting, replaying a run from its journal reproduces it exactly, so record and replay
+induce the same distribution over traces, and resuming after a crash continues the run with
+the distribution it would have had without the crash, provided the crash does not depend on a
+response that was never journaled.
+The pointwise core of both results is mechanized in Lean~4, and a Rust prototype that
+implements the semantics passes replay and crash-recovery tests at every journal position.
+The results place a classical recovery technique, logging nondeterministic events, inside a
+probabilistic semantics, so durability no longer requires treating each model call as an opaque
+value with no distribution.
+Extending them to concurrent agents, formalized side effects, and information-flow control is
+the main direction for future work.

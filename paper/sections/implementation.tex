@@ -1,0 +1,54 @@
+
+The \texttt{agentical} Rust crate has no dependencies beyond the standard library.
+It defines synchronous, executor-agnostic traits for the agent, the oracle, and the journal,
+shown in Listing~\ref{lst:traits}, along with interfaces for channels, memory, and supervision
+intended for future multi-agent work (Section~\ref{sec:limitations}).
+
+\begin{lstlisting}[caption={The agent, oracle, and journal traits (doc comments omitted).},label={lst:traits}]
+pub trait Agent {
+    type State;
+    type Out;
+    fn step(&mut self, state: &mut Self::State) -> Step<Self::Out>;
+}
+
+pub trait Oracle {
+    fn sample(&self, prompt: Prompt) -> Sampled;
+    fn measure_hint(&self) -> Option<Dist> { None }
+}
+
+pub trait Journal {
+    fn append(&mut self, agent: &AgentId, event: Event) -> Cursor;
+    fn replay_next(&self, agent: &AgentId) -> Outcome;
+    fn checkpoint(&self, agent: &AgentId) -> Cursor;
+}
+\end{lstlisting}
+
+The journal is position-indexed: the cursor is the key, as in Section~\ref{sec:modes}, so there
+is no key-to-value map and no collision assumption.
+A runtime module implements the semantics for a single agent:
+\begin{itemize}[noitemsep]
+  \item \texttt{InMemoryJournal}, with \texttt{append}, \texttt{replay\_next}, \texttt{rewind},
+    and \texttt{truncate} (to simulate a crash);
+  \item \texttt{SeededOracle}, a categorical sampler driven by a SplitMix64 generator, which
+    stands in for an LLM;
+  \item a driver that runs an agent in record, replay, or resume mode following
+    \textsc{[O-rec]}, \textsc{[O-rep]}, and \textsc{[O-resume]}.
+\end{itemize}
+
+\paragraph{Side effects.}
+The prototype also journals tool side effects, outside the formal results, using a
+write-ahead discipline.
+Before performing an effect it appends an \emph{intent} record carrying the effect's argument;
+after the effect succeeds it appends a \emph{committed} record carrying the result.
+Replay returns the journaled result and does not perform the effect again.
+A crash between the two records leaves a dangling intent, which recovery detects and resolves
+either by performing the effect again with the journaled argument, which is safe for an
+idempotent effect of a single agent, or by recording a compensation.
+Replaying a compensated effect stops the run without performing anything.
+Section~\ref{sec:eval-e2} tests this behaviour at every crash point; formalizing it is future
+work.
+
+\paragraph{What is not implemented.}
+The channel, memory, and supervisor interfaces have no implementation, so the prototype runs a
+single agent.
+The journal lives in memory only; there is no persistent backend.

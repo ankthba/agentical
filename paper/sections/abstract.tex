@@ -1,0 +1,27 @@
+
+Agents built on large language models (LLMs) run for minutes or hours, call tools with real
+side effects, and crash.
+Because model calls are nondeterministic, re-running a crashed agent re-samples every call
+and can repeat work that already happened.
+Durable-execution engines avoid this by recording each nondeterministic result and replaying
+it, but they treat each result as an opaque value and say nothing about the distribution it
+came from.
+We give a small probabilistic semantics for an LLM agent in which every model call is a draw
+from an abstract probability measure and every response is recorded in an append-only
+journal, with record, replay, and resume modes.
+We prove that replaying a run from its journal reproduces its trace and journal exactly, so
+replay succeeds with probability~1 and record and replay induce the same distribution over
+traces.
+We also prove that after a crash at any point, resuming with fresh randomness behaves exactly
+like an uninterrupted run whose randomness is spliced at the crash point, so the continuation
+follows the original distribution conditioned on what survived, provided the crash does not
+depend on a response that was never journaled.
+The pointwise core of both results is mechanized in Lean~4 for every program tree and every
+randomness tape; the probabilistic statements follow on paper.
+A dependency-free Rust prototype implements the semantics, together with write-ahead logging
+for tool side effects.
+On it, 1,000 of 1,000 replays reproduce their run, and recovery from all 4,664 crash points
+tested completes without repeating a committed side effect.
+Journal appends take about 100 nanoseconds.
+We close with what extending these guarantees to concurrent agents and to information-flow
+control requires.
