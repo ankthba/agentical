@@ -1,6 +1,7 @@
 /-
-  Mechanization of replay soundness and crash recovery for a single
-  nondeterministic agent.
+  Mechanization of replay soundness and crash recovery for a nondeterministic
+  agent, and their generic lifting to any system with a deterministic step
+  function (Section 5 of the paper shows the multi-agent calculus is one).
 
   Companion to `paper/sections/metatheory.tex`.
   Checked with Lean v4.30.0 (see `lean-toolchain`): `lean AgenticalT1.lean`.
@@ -174,10 +175,88 @@ theorem c2_crash_resume_same :
   simp only [splice]
   split <;> rfl
 
+/-! ## Systems of agents
+
+A multi-agent system under a fixed *deterministic* scheduler is a deterministic
+state machine whose only nondeterminism is oracle calls: the scheduler picks the
+next agent as a function of the configuration (which includes the run so far),
+and every non-oracle step (pure computation, memory, channels, journaling of
+effect intents) is a function of the configuration. Any such system unfolds into a program tree, so replay soundness
+and crash recovery carry over, with a single global journal. -/
+
+/-- One step of a whole system: halt, a deterministic internal step, or an oracle
+    call whose response selects the next configuration. -/
+inductive Act (C : Type) where
+  | halt (out : Nat)
+  | tau (next : C)
+  | draw (prompt : Nat) (next : Nat → C)
+
+/-- A system: a configuration type with a step function. -/
+structure System where
+  C : Type
+  step : C → Act C
+
+/-- Unfold `fuel` steps of a system from configuration `c` into a program tree.
+    Running out of fuel halts with the distinguished output `outOfFuel`. -/
+def System.tree (S : System) (outOfFuel : Nat) : Nat → S.C → Prog
+  | 0, _ => .halt outOfFuel
+  | f + 1, c =>
+      match S.step c with
+      | .halt o => .halt o
+      | .tau c' => S.tree outOfFuel f c'
+      | .draw p k => .draw p (fun v => S.tree outOfFuel f (k v))
+
+/-- **Replay soundness for systems.** For every system, deterministic scheduler
+    (built into `step`), step bound, configuration, tape and cursor, replaying the
+    global journal reproduces the recorded run. -/
+theorem sys_replay_sound (S : System) (o f : Nat) (c : S.C) (ω : Tape) (cur : Nat) :
+    replay (S.tree o f c) (record (S.tree o f c) ω cur).2 = record (S.tree o f c) ω cur :=
+  t1_replay_sound _ ω cur
+
+/-- **Crash recovery for systems.** Crash after any prefix of the global journal
+    and resume with fresh randomness: the result is the uninterrupted run on the
+    spliced tape. -/
+theorem sys_crash_resume (S : System) (o f : Nat) (c : S.C) (ω ω' : Tape) (cur n : Nat) :
+    resume (S.tree o f c) ((record (S.tree o f c) ω cur).2.take n) ω' cur =
+      record (S.tree o f c) (splice ω ω' (cur + n)) cur :=
+  c2_crash_resume _ ω ω' cur n
+
+/-- More fuel never changes a run that already halted: if the run of the
+    `f`-step tree does not end in `outOfFuel`, the `f+1`-step tree gives the same
+    run. (Stated for traces whose final label is a genuine halt.) -/
+theorem tree_mono (S : System) (o : Nat) :
+    ∀ (f : Nat) (c : S.C) (ω : Tape) (cur : Nat),
+      (record (S.tree o f c) ω cur).1.getLast? ≠ some (Label.done o) →
+      record (S.tree o (f + 1) c) ω cur = record (S.tree o f c) ω cur := by
+  intro f
+  induction f with
+  | zero => intro c ω cur h; simp [System.tree, record] at h
+  | succ f ih =>
+      intro c ω cur h
+      unfold System.tree
+      unfold System.tree at h
+      cases hs : S.step c with
+      | halt out => rfl
+      | tau c' =>
+          rw [hs] at h
+          exact ih c' ω cur h
+      | draw p k =>
+          rw [hs] at h
+          simp only [record] at h ⊢
+          have hrest : (record (S.tree o f (k (ω cur p))) ω (cur + 1)).1.getLast? ≠ some (Label.done o) := by
+            intro hc
+            apply h
+            rw [List.getLast?_cons]
+            simp [hc]
+          rw [ih (k (ω cur p)) ω (cur + 1) hrest]
+
 #print axioms t1_replay_sound
 #print axioms t1_equiprob_pointwise
 #print axioms l1_cursors
 #print axioms c2_crash_resume
 #print axioms c2_crash_resume_same
+#print axioms sys_replay_sound
+#print axioms sys_crash_resume
+#print axioms tree_mono
 
 end Agentical

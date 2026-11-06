@@ -1,6 +1,6 @@
 
-The results of this paper concern a single agent with no recursion and no formalized side
-effects.
+The results of this paper assume no recursion, deterministic scheduling with a single journal,
+and no formalized model of the external world.
 This section describes the limits of the prototype and what extending the theory requires.
 Several of these extensions are subtle: designs that look natural turn out to be unsound, and we
 note the pitfalls we know of.
@@ -30,40 +30,33 @@ alone under late commits without a bound on in-flight time, so any recovery theo
 explicit assumptions about the external system, such as idempotence, atomicity, or a reliable
 way to query whether an effect happened.
 
-\paragraph{Concurrent agents.}
-With several agents, replay and recovery become substantially harder.
-\begin{itemize}[noitemsep]
-  \item \emph{Interleaving.} A replayed run must follow the original interleaving of the agents,
-    or agents that share state can read different values than they did originally. The
-    scheduler's choices must therefore be journaled or reproduced deterministically.
-  \item \emph{Recovery points.} Recovery must resume from a consistent cut of the agents'
-    journals~\citep{chandy1985snapshots}. With shared memory this must account for which write
-    each read observed, not only for messages; Wu et al.~\citep{wu2026safetoresume} show that
-    agent frameworks can roll back to states that are not consistent cuts.
-  \item \emph{Messages.} Messages sent before a cut but received after it must be delivered
-    again exactly once, which requires identifying messages by channel and sequence number
-    rather than by value.
-  \item \emph{Restart.} Restarting part of a running system, as a supervisor might, also
-    requires restoring the restarted agent's local state and suppressing messages it already
-    sent.
-\end{itemize}
+\paragraph{Distributed journals and partial restart.}
+Theorem~\ref{thm:sys} assumes deterministic scheduling and one totally ordered journal, and it
+replays the whole system.
+Lifting these restrictions is substantially harder.
+With one journal per agent, persisted independently, recovery must resume from a consistent cut
+of the journals~\citep{chandy1985snapshots}; with shared memory the cut must account for which
+write each read observed, not only for messages, and Wu et al.~\citep{wu2026safetoresume} show
+that agent frameworks can roll back to states that are not consistent cuts.
+Messages sent before a cut but received after it must then be delivered again exactly once,
+which requires identifying messages by channel and sequence number rather than by value.
+Restarting one agent in a running system, as a supervisor might, additionally requires
+restoring its local state and suppressing the messages it already sent.
+The prototype runs a single agent, so the multi-agent results are not yet tested.
 
-\paragraph{Information-flow control.}
-LLMbda~\citep{garby2026llmbda} proves probabilistic noninterference for a single agent's
-program.
-For concurrently scheduled agents, classical results on multi-threaded programs show that the
-scheduler must not observe how long secret computations take, or timing becomes an information
-channel~\citep{volpano1999probabilistic,sabelfeld2000probabilistic}.
-Coarse-grained floating labels~\citep{stefan2011lio}, as used for agents by
-APPA~\citep{kravchenko2026appa}, are a natural discipline, but they must keep the labels of
-existing memory cells fixed: if a high-security agent can overwrite a public cell with a
-secret label, whether a public agent can later read that cell leaks information.
-Parallel composition inside one agent is similarly delicate, because one thread's secret
-receive can block another's public output.
-Peters-Gill et al.~\citep{petersgill2026camels} show empirically that single-agent defences
-against prompt injection do not compose across agents, and Adams~\citep{adams2026sme} obtains
-noninterference for language models by running one instance per security level; a
-noninterference theorem for concurrently scheduled LLM agents remains open.
+\paragraph{Information flow.}
+Theorem~\ref{thm:ni} is proved on paper; mechanizing it is the natural next step.
+Its discipline is coarse: labels are per agent rather than per value, there is no
+declassification, and side effects, clock reads, and supervisors are excluded.
+LLMbda~\citep{garby2026llmbda} tracks labels on individual values and proves probabilistic
+noninterference for a single agent; APPA~\citep{kravchenko2026appa} adds recoverable floating
+labels for agents; and Peters-Gill et al.~\citep{petersgill2026camels} show empirically that
+single-agent defences against prompt injection do not compose across agents, which is the gap a
+theorem for concurrently scheduled agents addresses.
+Adams~\citep{adams2026sme} instead obtains noninterference for language models by running one
+instance per security level.
+Combining value-level labels with concurrent scheduling, and relaxing (A-SCHED) to realistic
+schedulers without reopening timing channels, are open problems.
 
 \paragraph{Compositional guarantees.}
 If each agent of a system meets its own goal with probability at least $p_i$, Boole's

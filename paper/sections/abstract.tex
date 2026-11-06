@@ -18,10 +18,16 @@ follows the original distribution conditioned on what survived, provided the cra
 depend on a response that was never journaled.
 The pointwise core of both results is mechanized in Lean~4 for every program tree and every
 randomness tape; the probabilistic statements follow on paper.
+Both results extend to systems of concurrently running agents that share memory and exchange
+messages, under any deterministic scheduler and with a single global journal, by a reduction
+to the single-agent case; the generic lifting is mechanized, and its instantiation to the
+multi-agent calculus is on paper.
+For such systems we prove a probabilistic noninterference theorem: under a floating-label
+discipline and a priority scheduler whose priorities depend only on public events, an agent's
+secret data does not influence, even statistically, what public observers see.
 A dependency-free Rust prototype implements the semantics, together with write-ahead logging
 for tool side effects.
 On it, 1,000 of 1,000 replays reproduce their run, and recovery from all 4,664 crash points
 tested completes without repeating a committed side effect.
 Journal appends take about 100 nanoseconds.
-We close with what extending these guarantees to concurrent agents and to information-flow
-control requires.
+We state precisely which restrictions these guarantees need and what lifting them requires.

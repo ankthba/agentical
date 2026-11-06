@@ -157,8 +157,9 @@ anything that depends on it can crash the agent, which is the order \textsc{[O-r
 
 \noindent
 For a single agent every prefix of its journal is a valid recovery point, so no
-consistent-cut condition is needed; Section~\ref{sec:limitations} explains why concurrent
-agents need one.
+consistent-cut condition is needed; the same holds for systems with one global journal
+(Section~\ref{sec:sys-replay}), and Section~\ref{sec:limitations} explains why per-agent
+journals would need one.
 
 \subsection{Mechanization}
 \label{sec:mechanization}
@@ -171,6 +172,9 @@ The development represents values, prompts, and cursors by natural numbers, prog
 trees of Section~\ref{sec:syntax}, and tapes by functions
 $\mathbb{N} \to \mathbb{N} \to \mathbb{N}$, and quantifies over every tree, tape, starting
 cursor, and crash point.
+It also proves the generic lifting of these results from program trees to any system with a
+deterministic step function (Section~\ref{sec:sys-replay}); that the multi-agent calculus is
+such a system is shown on paper.
 It contains no unproven steps, and \texttt{\#print axioms} reports only Lean's standard axioms
 (\texttt{propext}, and \texttt{Quot.sound} for the crash-recovery theorems).
 The translation from terms to trees and the measure-theoretic layer, Lemma~\ref{lem:tape} and

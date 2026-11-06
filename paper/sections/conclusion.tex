@@ -10,5 +10,9 @@ implements the semantics passes replay and crash-recovery tests at every journal
 The results place a classical recovery technique, logging nondeterministic events, inside a
 probabilistic semantics, so durability no longer requires treating each model call as an opaque
 value with no distribution.
-Extending them to concurrent agents, formalized side effects, and information-flow control is
-the main direction for future work.
+Both results extend to systems of concurrent agents under deterministic scheduling with a
+single global journal, and such systems satisfy a probabilistic noninterference theorem under a
+floating-label discipline with fixed labels on memory and channels and a priority scheduler
+whose priorities depend only on public events.
+Distributed journals, formalized side effects, finer-grained information flow, and
+mechanizing the noninterference proof are the main directions for future work.

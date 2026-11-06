@@ -17,8 +17,8 @@ Fixing the tape is also what lets us compare runs in different modes directly, a
 the coupling method for relational reasoning about probabilistic
 programs~\citep{barthe2015coupling}.
 Probabilistic automata~\citep{segala1995probabilistic} add nondeterministic choice, resolved by
-a scheduler, to probabilistic transitions; a single agent needs no scheduler, but concurrent
-agents would (Section~\ref{sec:limitations}).
+a scheduler, to probabilistic transitions; a single agent needs no scheduler, and concurrent
+agents use one (Section~\ref{sec:multiagent}).
 
 \subsection{Durable Execution}
 \label{sec:bg-durable}
@@ -68,7 +68,7 @@ MSC coord.~\citep{bollig2026msc}
 Temporal~\citep{temporal2024docs}
   & $\sim$ & $\times$ (det.\ required) & \checkmark & $\times$ & \checkmark \\
 \textbf{This work}
-  & $\times$ & \checkmark & \checkmark & \checkmark{} (Lean, pointwise) & \checkmark{} (Rust) \\
+  & \checkmark{} (det.\ scheduling) & \checkmark & \checkmark & \checkmark{} (Lean, pointwise) & $\sim$ (Rust, single agent) \\
 \bottomrule
 \end{tabular}%
 }

@@ -57,9 +57,21 @@ Resuming with the same randomness reproduces the original run, and resuming with
 randomness continues it with the original distribution conditioned on what survived, provided
 the crash does not depend on a response that was never journaled.
 
+\item \textbf{Many agents (Section~\ref{sec:multiagent}).}
+Under any deterministic scheduler and with a single global journal, a system of concurrently
+running agents that share memory and exchange messages unfolds into a single program tree, so
+replay soundness and crash recovery carry over to whole systems (Theorem~\ref{thm:sys}).
+We also prove a noninterference theorem for concurrently scheduled agents
+(Theorem~\ref{thm:ni}): under a floating-label discipline, with labels on memory cells and
+channels that never change, and a priority scheduler whose priorities depend only on public
+events, the public trace of a system is the same whatever its secret data, pointwise for every
+family of per-agent randomness tapes and hence in distribution.
+
 \item \textbf{A Lean mechanization (Section~\ref{sec:mechanization}).}
-The pointwise core of both results is proved in Lean~4 for every program tree, randomness
-tape, starting cursor, and crash point, with no unproven steps.
+The pointwise core of both results, and their generic lifting to any deterministic step
+system, are proved in Lean~4 for every program tree, randomness tape, starting cursor, and
+crash point, with no unproven steps; the instantiation to the multi-agent calculus and
+the noninterference theorem are proved on paper.
 
 \item \textbf{A prototype and measurements (Sections~\ref{sec:rust-runtime}
 and~\ref{sec:evaluation}).}
@@ -76,21 +88,21 @@ harnesses are available at \url{https://github.com/ankthba/agentical}.
 
 \subsection*{Scope}
 
-The results concern a single agent.
 Logging nondeterministic events for replay is not new; what is new is a semantics in which
 recovery with fresh randomness provably preserves the distribution of a run
 (Corollary~\ref{cor:resume}(ii)), not only individual runs.
-Write-ahead logging of side effects is implemented and tested but not part of the formal
-results.
-Extending the guarantees to concurrently running agents and to information-flow control
-raises problems we describe in Section~\ref{sec:limitations}; we do not claim results for them
-here.
+Replay never repeats a side effect, but whether recovery may perform an interrupted effect
+again depends on the external world, which we do not formalize (Section~\ref{sec:effects}).
+The multi-agent results assume deterministic scheduling and a single global journal; the
+prototype runs a single agent. Section~\ref{sec:limitations} lists what lifting these
+restrictions requires.
 
 \subsection*{Roadmap}
 
 Section~\ref{sec:background} reviews probabilistic semantics and durable execution.
-Section~\ref{sec:semantics} defines the calculus, and Section~\ref{sec:metatheory} proves
-replay soundness and crash recovery.
+Section~\ref{sec:semantics} defines the calculus, Section~\ref{sec:metatheory} proves replay
+soundness and crash recovery, and Section~\ref{sec:multiagent} extends both to systems of
+agents and proves noninterference.
 Section~\ref{sec:rust-runtime} describes the prototype and Section~\ref{sec:evaluation} the
 experiments.
 Section~\ref{sec:related} discusses related work, Section~\ref{sec:limitations} limitations and

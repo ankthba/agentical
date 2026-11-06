@@ -11,9 +11,11 @@ termination-insensitive probabilistic noninterference theorem for the whole calc
 its Lean-verified interpreter as the agent harness that calls the model.
 FIDES is a planner-based system that enforces information-flow policies around an LLM; its
 formal guarantees are stated for a deterministic model function.
-Like LLMbda we treat model calls probabilistically, but our concern is different: LLMbda
+Like LLMbda we treat model calls probabilistically, but our main concern is different: LLMbda
 studies what an agent's program may do with untrusted data, whereas we study recording,
-replaying, and recovering a run.
+replaying, and recovering a run. Our noninterference theorem (Theorem~\ref{thm:ni}) addresses
+what LLMbda does not model, concurrently scheduled agents, at the price of coarser, per-agent
+labels.
 
 \paragraph{Other calculi and languages for agents.}
 $\lambda_A$~\citep{liu2026lambdaA} extends the simply typed $\lambda$-calculus with oracle calls,
@@ -76,7 +78,7 @@ causal cuts.
 Li~\citep{li2026exactlyonce} proves that no policy based on verification alone achieves
 exactly-once effects under late commits without a bound on in-flight time.
 These works are deterministic or empirical; ours places replay and recovery inside a
-probabilistic semantics, for a single agent.
+probabilistic semantics, for single agents and for systems under deterministic scheduling.
 
 \paragraph{Durable-execution engines.}
 Temporal~\citep{temporal2024docs} re-executes deterministic workflow code against an event

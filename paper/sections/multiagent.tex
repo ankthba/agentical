@@ -1,0 +1,337 @@
+
+We now extend the semantics to several agents that run concurrently and interact through
+shared memory and channels.
+Two results carry over: replay soundness and crash recovery hold for whole systems, by a
+reduction to the single-agent case (Section~\ref{sec:sys-replay}), and a probabilistic
+noninterference theorem holds for concurrently scheduled agents under a floating-label
+discipline (Section~\ref{sec:ni}).
+Both depend on explicit restrictions, which we state as we go.
+
+\subsection{Systems}
+\label{sec:systems}
+
+A \emph{system} consists of agents, shared memory, and channels.
+An agent $\mathit{id}[M]_\Sigma$ has an identity, a term $M$, and a private state $\Sigma$ that
+holds its local variables, its current label $\mathit{pc}(\Sigma)$
+(Section~\ref{sec:ni}), a count of the oracle calls it has made, and a count of the agents it
+has spawned.
+Each agent runs a single thread; parallelism comes only from running several agents.
+Shared memory $H$ has a fixed set of cells, each with a fixed label $\ell_k$; channels have
+fixed labels $\ell_c$ and carry first-in-first-out queues.
+Agent terms extend those of Section~\ref{sec:syntax} with
+\[
+  \mathbf{read}\;k\;\mathbf{as}\;x\,.\,M \;\mid\;
+  \mathbf{write}\;k := e\,.\,M \;\mid\;
+  \mathbf{send}\;c\;e\,.\,M \;\mid\;
+  \mathbf{recv}\;c\;\mathbf{as}\;x\,.\,M \;\mid\;
+  \mathbf{spawn}\;N\,.\,M .
+\]
+A spawned agent's identity is $(\mathit{id}, n)$, where $\mathit{id}$ is the parent and $n$ is
+the parent's spawn count, so identities do not depend on any response.
+A configuration is \emph{well formed} if its agents' identities are distinct and no agent has
+an identity $(x, m)$ with $m$ at least the spawn count of $x$; steps preserve well-formedness,
+so identities stay unique.
+Every construct except an oracle call has a single successor.
+A receive on an empty queue is disabled, and so is any step whose side condition
+(Section~\ref{sec:ni}) fails: the agent blocks rather than aborting the system.
+An agent whose term is $\mathbf{return}\;e$ halts.
+
+A \emph{scheduler} $\sigma$ chooses, at each step, one enabled agent to step next, as a function
+of the run so far, or stops the system when no agent is enabled.
+We consider only \emph{deterministic} schedulers, and quantify over all of them.
+For replay and recovery (Theorem~\ref{thm:sys}), a randomized scheduler is covered by making its
+random choices oracle calls, so that they are drawn from a measure and journaled like any
+other; the noninterference theorem of Section~\ref{sec:ni} requires a deterministic scheduler.
+
+\begin{lemma}[Systems are programs]
+\label{lem:sys-tree}
+For every deterministic scheduler $\sigma$ and initial configuration $C_0$, the run of the
+system is determined by the sequence of oracle responses: it is a tree in the sense of
+Section~\ref{sec:syntax}, whose calls are all the agents' oracle calls in the order the
+scheduler makes them.
+\end{lemma}
+
+\begin{proof}
+The run so far is a function of the responses received so far, so at each step $\sigma$ picks
+the agent as a function of those responses, and that agent's next construct either has a single
+successor (pure computation, memory, channels, spawning) or is an oracle call.
+Unfolding the run therefore gives a tree whose internal nodes are oracle calls and whose
+deterministic steps are absorbed into the edges, as in the translation $T(M)$.
+The tree is finite in depth: every step consumes a construct of some agent's term, and a spawn
+splits $\mathbf{spawn}\;N.\,M$ into $N$ and $M$, so the total size of all agents' terms strictly
+decreases.
+A leaf is reached when no agent is enabled: either every agent has halted, or the remaining
+agents are blocked; we label the leaf with the halted agents' results in the first case and
+with a distinguished deadlock outcome in the second.
+\end{proof}
+
+\noindent
+The Lean development formalizes this as a \emph{system}: a configuration type with a step
+function that halts, takes a deterministic step, or makes an oracle call, unfolded into a tree
+up to a step bound (\texttt{System.tree}).
+It proves that raising the bound by one never changes a run that has already halted, provided
+the halting output differs from the distinguished out-of-fuel output (\texttt{tree\_mono}).
+For the calculus, a bound at least the total size of the initial terms covers the whole run.
+
+\subsection{Replay and Recovery for Systems}
+\label{sec:sys-replay}
+
+Let all agents share a single journal that records every oracle call, whichever agent makes
+it, in the order the calls occur.
+
+\begin{theorem}[Replay soundness and crash recovery for systems]
+\label{thm:sys}
+For every deterministic scheduler and initial configuration, Theorem~\ref{thm:replay} and
+Corollary~\ref{cor:resume} hold for the system's run with its global journal: replaying the
+whole system from its initial configuration against the journal reproduces the run, and after
+a crash that keeps any prefix of the journal, resuming the whole system with fresh randomness
+gives the uninterrupted run on the spliced tape.
+Since every step other than an oracle call is deterministic, the run reproduced includes all
+memory, channel, and spawn steps, not only the oracle calls.
+\end{theorem}
+
+\begin{proof}
+By Lemma~\ref{lem:sys-tree} the run is a tree, so Theorem~\ref{thm:replay} and
+Corollary~\ref{cor:resume} apply to it directly; in Lean these are
+\texttt{sys\_replay\_sound} and \texttt{sys\_crash\_resume}.
+Given the responses, the deterministic steps between calls are the same in record, replay, and
+resume, because the scheduler and every non-oracle construct are deterministic.
+\end{proof}
+
+\noindent
+The theorem's restrictions are what make it simple, and each one rules out a failure that a
+more ambitious design must handle.
+\begin{itemize}[noitemsep]
+  \item \emph{One journal, totally ordered.} A crash keeps a prefix of a single log, which is
+    automatically a consistent state. With one journal per agent, persisted independently, a
+    crash can keep an agent's receive without the matching send, and recovery must find a
+    consistent cut of the logs~\citep{chandy1985snapshots} that also accounts for which memory
+    write each read observed.
+  \item \emph{Deterministic scheduling.} If replay could interleave agents differently from the
+    recorded run, an agent could read a different value from shared memory than it did
+    originally, and replay would diverge from the journal.
+  \item \emph{Whole-system replay.} Replay re-runs every agent from the initial
+    configuration. Restarting one agent in the middle of a run, as a supervisor might, would
+    also require restoring that agent's local state and suppressing messages it had already
+    sent; we do not treat it.
+\end{itemize}
+
+\subsection{Side Effects}
+\label{sec:effects}
+
+A side effect $\mathbf{do}\;f(e)$ changes the external world and returns a response.
+We model it as two journaled oracle calls: an \emph{intent} call, whose measure is a point mass
+on the record $(f, v)$ with $e \Downarrow v$, and a \emph{response} call, whose measure is the
+world's response distribution for $f$ on $v$.
+In record mode the runtime performs the effect between the two calls.
+Replay reads both entries from the journal and performs nothing, so the replay part of
+Theorem~\ref{thm:sys} covers effects: replay never repeats an effect.
+The distributional part of crash recovery does not carry over, because the world's response to
+an effect depends on the world's state, which is not a fixed measure per prompt.
+
+Recovery is where effects differ from model calls.
+A crash between the two entries leaves an intent without a response, and resuming draws the
+response afresh, which in the runtime means performing the effect again; but the world may
+already have applied it.
+Whether this is safe is a property of the world, not of the journal.
+If $f$ is idempotent on the world state and no other effect on the same state happened in
+between, performing it again leaves the world as if it had been performed once; this is the
+case the prototype handles by performing the effect again (Section~\ref{sec:eval-e2}).
+Otherwise recovery needs a way to ask the world whether the effect happened, or a compensating
+action with its own write-ahead record, and no policy that relies only on checking can
+guarantee exactly-once effects without a bound on how long an effect may remain in
+flight~\citep{li2026exactlyonce}.
+We do not formalize the world, so these remain assumptions rather than theorems.
+
+\subsection{Noninterference for Concurrent Agents}
+\label{sec:ni}
+
+Agents often handle data of different sensitivity: an agent that summarizes a confidential
+document should not be able to leak it, even statistically, to an agent whose output is public.
+We give a floating-label discipline and prove that, under a restricted class of schedulers, the
+public behaviour of a system does not depend on its secret data.
+
+\paragraph{Labels.}
+Fix a lattice $(\mathcal{L}, \sqsubseteq)$ of security labels and a set $\Low \subsetneq
+\mathcal{L}$ of observable labels that is downward closed and closed under joins.
+Each agent carries a current label $\mathit{pc}$, which only rises.
+The constructs of Section~\ref{sec:systems} have these side conditions and label updates:
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Construct} & \textbf{Permitted if} & \textbf{Then} \\
+\midrule
+$\mathbf{read}\;k$ & always & $\mathit{pc} := \mathit{pc} \sqcup \ell_k$ \\
+$\mathbf{write}\;k := e$ & $\mathit{pc} \sqsubseteq \ell_k$ & cell $k$ keeps its label \\
+$\mathbf{send}\;c\;e$ & $\mathit{pc} \sqsubseteq \ell_c$ & --- \\
+$\mathbf{recv}\;c$ & $\mathit{pc} \sqsubseteq \ell_c$ & $\mathit{pc} := \ell_c$ \\
+oracle call with output label $\ell$ & $\mathit{pc} \sqsubseteq \ell$ & $\mathit{pc} := \ell$ \\
+$\mathbf{spawn}\;N$ & always & the child starts with the parent's $\mathit{pc}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+A receive is a destructive read, so it requires $\mathit{pc} \sqsubseteq \ell_c$ like a write.
+Labels of cells and channels never change, and no cells or channels are created.
+A step whose side condition fails is disabled, so the agent blocks
+(Section~\ref{sec:systems}); aborting the whole system instead would let a secret decide whether
+public agents run at all.
+For this section we exclude side effects and clock reads, which expose the external world or
+timing, and supervisors.
+The global journal of Section~\ref{sec:sys-replay} records secret data, and its length reveals
+how much secret computation happened, so it must be readable only at the top label.
+
+\paragraph{Per-agent tapes.}
+For noninterference it is convenient to give each agent its own tape: the response to the
+$i$-th oracle call of agent $\mathit{id}$ with prompt $p$ is $\theta(\mathit{id}, i, p)$, for
+a family $\theta$ whose coordinates are independent with $\theta(\mathit{id},i,p) \sim
+\meas{p}$.
+Because identities are unique and each agent's call count increases, distinct calls read
+distinct coordinates, and the argument of Lemma~\ref{lem:tape} shows that this realizes
+sampling from the oracle, for any deterministic scheduler.
+
+\paragraph{Observations.}
+A step is \emph{Low-visible} if the agent's current label before the step is in $\Low$ and the
+data it touches is labelled in $\Low$: the cell for a read or write, the channel for a send or
+receive, and the output label for an oracle call; spawning and halting are Low-visible when the
+agent's label is in $\Low$.
+Low-visible steps emit labels that carry their data: $\iota(k, v)$, $\omega(k, v)$, $c!v$,
+$c?v$, $o(\mathit{id}, p, v)$, $\mathsf{spw}(\mathit{id}')$, and $\mathsf{done}(\mathit{id},
+v)$.
+The \emph{Low trace} $\mathit{tr}_{\Low}$ of a run is its sequence of Low-visible labels; other
+steps are deleted, not replaced by a placeholder.
+An agent is \emph{Low-active} if its label is in $\Low$ and its next construct is not a receive
+on a channel whose label is outside $\Low$.
+Two configurations are \emph{low-equivalent}, $C =_{\Low} C'$, if they have the same Low-active
+agents, each with the same term and private state on both sides, the same values in cells
+labelled in $\Low$, and the same queues on channels labelled in $\Low$.
+Everything else, including agents that are not Low-active, may differ.
+
+\paragraph{Assumptions.}
+\begin{description}[noitemsep]
+  \item[(A-SCHED)] The scheduler is deterministic, and at each step it chooses the
+    highest-priority enabled agent under a total order on agent identities that is a function
+    of the Low trace so far. It cannot observe steps that are not Low-visible, not even how
+    many there were.
+  \item[(A-TERM)] Every maximal run of consecutive steps by agents that are not Low-active is
+    finite. In the calculus as defined every run is finite (Lemma~\ref{lem:sys-tree}), so this
+    holds automatically; we state it because it is exactly what an extension with recursion
+    would need, and it is the only termination assumption the proof uses.
+  \item[(A-ORC)] Each oracle response depends only on the calling agent's prompt and its own
+    tape coordinates. This holds in the calculus by construction; in a deployment it requires
+    that model calls at different labels share no state, such as a cache or a conversation.
+\end{description}
+
+\begin{theorem}[Noninterference]
+\label{thm:ni}
+Assume (A-SCHED) and (A-ORC). For every tape family $\theta$ and all well-formed configurations
+$C_0 =_{\Low} C_0'$, if (A-TERM) holds for the runs from $C_0$ and from $C_0'$ on $\theta$,
+then the two runs have the same Low trace.
+Consequently, for any distribution of tape families under which (A-TERM) holds almost surely
+for both runs, the Low traces of the two runs have the same distribution; in particular this
+holds for independent tapes, which realize sampling from the oracle.
+\end{theorem}
+
+\noindent
+The proof rests on three lemmas.
+
+\begin{lemma}[Steps that are not Low-active]
+\label{lem:ni-high}
+If $C =_{\Low} C'$ and $C$ steps to $D$ by an agent that is not Low-active, then
+$D =_{\Low} C'$, the step is not Low-visible, and it changes no Low-active agent, no cell
+labelled in $\Low$, and no channel labelled in $\Low$.
+\end{lemma}
+
+\begin{proof}
+Suppose first that the agent's label $\mathit{pc}$ is not in $\Low$.
+Because $\Low$ is downward closed, any label above $\mathit{pc}$ is outside $\Low$, so the side
+conditions forbid writing a cell, sending or receiving on a channel, or making an oracle call
+with an output label in $\Low$; reads only raise $\mathit{pc}$ further; and a spawned child
+inherits $\mathit{pc}$ and is therefore not Low-active.
+The step touches only the agent itself, cells and channels outside $\Low$, and possibly a new
+agent that is not Low-active.
+Otherwise the agent's label is in $\Low$ but its next construct is a receive on a channel
+labelled outside $\Low$; the step changes only that channel and the agent, whose label becomes
+$\ell_c \notin \Low$.
+In both cases no Low-visible label is emitted and every component that $=_{\Low}$ constrains is
+unchanged.
+\end{proof}
+
+\begin{lemma}[Low-active steps]
+\label{lem:ni-low}
+If $C =_{\Low} C'$ and the same Low-active agent takes its next step in both, then both steps
+emit the same label, or neither is Low-visible, and the resulting configurations are
+low-equivalent.
+\end{lemma}
+
+\begin{proof}
+The agent has the same term and private state on both sides, so it performs the same construct
+with the same values computed from its own state.
+A read of a cell in $\Low$ returns the same value on both sides, and the agent's label stays in
+$\Low$ because $\Low$ is closed under joins; a read of a cell outside $\Low$ may return
+different values, but it raises the agent's label out of $\Low$ on both sides, so the agent is
+no longer Low-active on either side.
+A write or send stores the same value; if the target is in $\Low$ the label is the same, and
+otherwise only components outside $\Low$ change.
+A receive is on a channel in $\Low$ (the agent is Low-active), so it takes the same value from
+the same queue.
+An oracle call has the same prompt and is the agent's $i$-th call on both sides, so by
+(A-ORC) it reads the same tape coordinate and gets the same response; if its output label is
+outside $\Low$ the agent leaves the Low-active set on both sides.
+A spawn creates the same identity with the same term and label on both sides.
+Afterwards either the agent's term and state are the same on both sides, or its label is outside
+$\Low$ on both sides; in either case it is Low-active on both sides or on neither, and the same
+holds for a spawned child.
+\end{proof}
+
+\begin{lemma}[The next Low-active step]
+\label{lem:ni-next}
+Let $C =_{\Low} C'$ be reached by runs with the same Low trace, and suppose (A-TERM) holds.
+Then either neither run takes another step by a Low-active agent, or both runs next take a
+step by the same Low-active agent.
+\end{lemma}
+
+\begin{proof}
+Whether a Low-active agent is enabled depends only on its term and private state (including its
+label, which the side conditions check) and, for a receive, on a queue of a channel in $\Low$,
+so the set $E$ of enabled Low-active agents is the same in $C$ and $C'$.
+By Lemma~\ref{lem:ni-high}, steps by agents that are not Low-active do not change $E$, the
+Low-active agents, or the Low trace, and the scheduler's priority order depends only on the Low
+trace, so it is the same on both sides and stays fixed while such steps run.
+If $E$ is empty, only agents that are not Low-active can step, and they can never enable a
+Low-active agent, so neither run takes another Low-active step.
+Otherwise let $X$ be the highest-priority agent in $E$.
+On each side the scheduler fires the highest-priority enabled agent; until it fires $X$, it
+can only fire agents above $X$ that are not Low-active, because no other Low-active agent above
+$X$ is enabled.
+By (A-TERM) such a sequence of steps is finite, and when it ends the highest-priority enabled
+agent is $X$, which is still enabled.
+So both runs next take a step by $X$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:ni}]
+Every Low-visible step is taken by a Low-active agent: an agent whose label is outside $\Low$
+emits no Low-visible label, and a receive on a channel outside $\Low$ is not Low-visible.
+By induction on the number of Low-active steps, using Lemmas~\ref{lem:ni-high}
+to~\ref{lem:ni-next}, the two runs take the same sequence of Low-active steps with the same
+labels, interleaved with steps that emit no Low-visible label, and remain low-equivalent with
+the same Low trace after each.
+Hence their Low traces are equal.
+For the probabilistic statement, the two Low traces are equal on the event where (A-TERM) holds
+for both runs; if this event has probability~1, they have the same distribution.
+\end{proof}
+
+\noindent
+Each assumption rules out a known leak.
+Without (A-SCHED), a scheduler that counts hidden steps can turn the running time of a secret
+computation into a public difference~\citep{volpano1999probabilistic,sabelfeld2000probabilistic}.
+Without (A-TERM), a secret computation that runs forever withholds every later public event,
+the termination channel that termination-insensitive guarantees leave open.
+Without fixed cell labels, an agent holding a secret could relabel a public cell and so decide,
+through the secret, whether a public agent can read it; and with parallel threads inside an
+agent, one thread's secret receive could block another thread's public output, which is why each
+agent runs one thread.
+Finally, the discipline is coarse: an agent that has read a secret can never again produce
+public output, and the calculus has no construct for deliberate declassification.
+LLMbda~\citep{garby2026llmbda} tracks labels on individual values for a single agent; combining
+its finer tracking with concurrent scheduling is open.
